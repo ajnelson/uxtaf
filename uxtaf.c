@@ -32,6 +32,7 @@ See uxtaf.txt for usage information.
 #include <stdlib.h>
 #include <string.h>
 #include <strings.h>
+#include <ctype.h>
 
 #include <sys/types.h>
 
@@ -78,7 +79,7 @@ struct boot_s { /* 20 bytes */
 };
 
 struct direntry_s { /* 64 bytes */
-	uint8_t fnl; /* 0x00 / 0xff -> unused, 0xe5 -> deleted */
+	uint8_t fnl; /* Theoretically, File Name Length. 0x00 / 0xff -> unused, 0xe5 -> deleted */
 	uint8_t attr;
 	char name[42];
 	uint32_t fstart; /* cluster, 0 (i.e. "root") for nul-files */
@@ -188,6 +189,8 @@ struct fat_s *build_fat_chain(FILE *f, struct info_s *info, uint32_t start,
 	size_t s;
 	uint32_t cluster, nc;
 
+
+        fprintf(stderr, "start = %d\n", (int) start);
 	head = calloc(1, sizeof(struct fat_s));
 	head->nextval = (start - 1) * info->bootinfo.spc + info->rootstart;
 	list = head;
@@ -204,6 +207,7 @@ struct fat_s *build_fat_chain(FILE *f, struct info_s *info, uint32_t start,
 			fprintf(stderr, "build_fat_chain: s = %i\n", s);
 			return(NULL);
 		}
+                fprintf(stderr, "clust = %d\n", (int) cluster);
 		cluster = info->fatmult == 2 ? bswap16(cluster) :
 		    bswap32(cluster);
 		cluster &= info->fatmask;
@@ -242,16 +246,18 @@ uint32_t find_dot_entry(struct dot_table_s *dot_table, uint32_t startcluster) {
 	return(DOT_NOT_FOUND);
 }
 
-void add_dot_entry(struct dot_table_s **dot_table, uint32_t cluster,
+void add_dot_entry(struct info_s *info, struct dot_table_s **dot_table, uint32_t cluster,
     uint32_t parent, int check) {
 	struct dot_table_s *newdot;
-
+    
 	if (!check || find_dot_entry(*dot_table, cluster) == DOT_NOT_FOUND) {
-		newdot = calloc(1, sizeof(struct dot_table_s));
-		newdot->this = cluster;
-		newdot->parent = parent;
-		newdot->next = *dot_table;
-		*dot_table = newdot;
+        if (info->bootinfo.spc * 512 * cluster < info->mediasize) { /*AJN Prevent segfaults caused by reading outside image size*/
+            newdot = calloc(1, sizeof(struct dot_table_s));
+            newdot->this = cluster;
+            newdot->parent = parent;
+            newdot->next = *dot_table;
+            *dot_table = newdot;
+        }
 	}
 }
 
@@ -343,7 +349,7 @@ int attach(struct info_s *info, struct dot_table_s **dot_table) {
 
 	info->pwd = info->rootstart; /* sensible start */
 	*dot_table = NULL;
-	add_dot_entry(dot_table, 1, 1, 0);
+	add_dot_entry(info, dot_table, 1, 1, 0);
 	fprintf(stderr, "attach: done\n");
 	return(0);
 }
@@ -441,6 +447,7 @@ int ls(struct info_s *info, struct dot_table_s **dot_table) {
 	struct fat_s *fatptr;
 	int freq[256];
 	uint32_t clust;
+    int is_dent;
 
 	for (i = 0; i < 256; i++)
 		freq[i] = 0;
@@ -472,7 +479,7 @@ int ls(struct info_s *info, struct dot_table_s **dot_table) {
 			de.fstart = bswap32(de.fstart);
 			de.fsize = bswap32(de.fsize);
 			bzero(fname, 43 * sizeof(char));
-			if (de.fnl == 0xe5)
+			if (de.fnl == 0xe5 || de.fnl > 42)
 				for (i = 0; i < 42; i++) {
 					fname[i] = de.name[i];
 					if (de.name[i] == 0x00 ||
@@ -483,6 +490,13 @@ int ls(struct info_s *info, struct dot_table_s **dot_table) {
 				}
 			else
 				strncpy(fname, de.name, de.fnl);
+            /*AJN Check name for unprintable characters. That's a good indication that this isn't supposed to be a directory entry.*/
+            is_dent = 1;
+            for (i = 0; i < 42; i++)
+                if (!isprint(fname[i]) && fname[i] != 0)
+                    is_dent = 0;
+            if (is_dent == 0)
+                continue; /*AJN Of course, the rest of the directory's probably dead at this point.*/
 			dc = dosdati(bswap16(de.cdate), bswap16(de.ctime));
 			da = dosdati(bswap16(de.adate), bswap16(de.atime));
 			du = dosdati(bswap16(de.udate), bswap16(de.utime));
@@ -503,7 +517,7 @@ int ls(struct info_s *info, struct dot_table_s **dot_table) {
 			    fname);
 
 			if (de.fnl != 0xe5 && de.attr & 16)
-				add_dot_entry(dot_table, de.fstart, clust, 1);
+				add_dot_entry(info, dot_table, de.fstart, clust, 1);
 
 			for (i = 0; i < strlen(fname); i++)
 				freq[(uint8_t)fname[i]] = 1;
@@ -640,7 +654,7 @@ void read_infofile(struct info_s *info, struct dot_table_s **dot_table) {
 			if (s == 1)
 				s = fread(&parent, sizeof(uint32_t), 1, infofile);
 			if (s == 1)
-				add_dot_entry(dot_table, this, parent, 0);
+				add_dot_entry(info, dot_table, this, parent, 0);
 		}
 		fclose(infofile);
 	} else {
@@ -676,6 +690,128 @@ void write_infofile(struct info_s *info, struct dot_table_s **dot_table) {
 	fclose(infofile);
 }
 
+int dfxml(struct info_s *info, struct dot_table_s *dot_table) {
+    int retval;
+	FILE *f;
+	f = fopen(info->imagename, "rb");
+	if (f == NULL) {
+		fprintf(stderr, "Error opening %s: %i\n",
+                info->imagename, errno);
+		return(errno);
+	}
+
+    printf("<?xml version='1.0' encoding='UTF-8'?>\n");
+    printf("<dfxml>\n");
+    retval = dfxmlify(f, "/", info, &dot_table);
+    printf("</dfxml>\n");
+	fclose(f);
+    return retval;
+}
+
+int dfxmlify(FILE *f, char *argv, struct info_s *info, struct dot_table_s **dot_table) {
+    int retval = 0;
+	struct direntry_s de;
+	char fname[43];
+	struct datetime_s da, dc, du;
+	int i, entry;
+	size_t s;
+	struct fat_s *fatptr;
+	uint32_t clust;
+    int is_dir;
+    char full_path[4096]; /*AJN Maybe overkill?*/
+    int concat_retval;
+    int is_dent;
+    
+    uint32_t prevpwd = info->pwd; /*AJN: Note that cd() only mutates info->pwd*/
+    cd(argv, info, *dot_table);
+	/*BEGIN COPY*/
+    
+	clust = (info->pwd - info->rootstart) / info->bootinfo.spc + 1;
+	for (fatptr = build_fat_chain(f, info, clust, 512 * info->bootinfo.spc);
+         fatptr != NULL; fatptr = fatptr->next) {
+		fseek(f, (uint64_t)(512 * fatptr->nextval), SEEK_SET);
+        
+		/*printf("entry fnl rhsvda startclust   filesize    "
+               "create_date_time    access_date_time    update_date_time "
+               "filename\n");*/
+		for (entry = 0; entry < info->bootinfo.spc; entry++) {
+			s = fread(&de, sizeof(struct direntry_s), 1, f);
+			if (s != 1) {
+				fprintf(stderr, "dfxmlify: s = %i\n", s);
+				return(1);
+			}
+            
+			if (de.fnl == 0 || de.fnl == 0xff)
+				continue; /* to next slot */
+            
+			de.fstart = bswap32(de.fstart);
+			de.fsize = bswap32(de.fsize);
+			bzero(fname, 43 * sizeof(char));
+			if (de.fnl == 0xe5 || de.fnl > 42)
+				for (i = 0; i < 42; i++) {
+					fname[i] = de.name[i];
+					if (de.name[i] == 0x00 ||
+					    (de.name[i] & 0xff) == 0xff) {
+						fname[i] = 0;
+						break;
+					}
+				}
+			else
+				strncpy(fname, de.name, de.fnl);
+            /*AJN Check name for unprintable characters. That's a good indication that this isn't supposed to be a directory entry.*/
+            is_dent = 1;
+            for (i = 0; i < 42; i++)
+                if (!isprint(fname[i]) && fname[i] != 0)
+                    is_dent = 0;
+            if (is_dent == 0)
+                continue; /*AJN Of course, the rest of the directory's probably dead at this point.*/
+            printf("  <fileobject>\n");
+			dc = dosdati(bswap16(de.cdate), bswap16(de.ctime));
+			da = dosdati(bswap16(de.adate), bswap16(de.atime));
+			du = dosdati(bswap16(de.udate), bswap16(de.utime));
+            is_dir = de.attr & 16;
+            /*Define full path*/
+            bzero(full_path, 4096 * sizeof(char));
+            concat_retval = snprintf(full_path, 4096, "%s%s%s", argv, strcmp(argv,"/") ? "/" : "", fname);
+            if (concat_retval < 0) {
+                retval = concat_retval;
+                fprintf(stderr, "dfxmlify: snprintf: Some kind of error forming the full path.\n");
+            } else {
+                printf("    <filename>%s</filename>\n",full_path+1); /*AJN DFXML has a history of not starting paths with '/'*/
+                printf("    <misc name='fnl'>%3u</misc>\n", de.fnl); /*AJN Not sure at the moment what 'fnl' stands for*/
+                printf("    <filesize>%d</filesize>\n", de.fsize);
+                printf("    <crtime>%04u-%02u-%02uT%02u:%02u:%02uZ</crtime>\n", dc.year, dc.month, dc.day, dc.hour, dc.minute, dc.second);
+                printf("    <atime>%04u-%02u-%02uT%02u:%02u:%02uZ</atime>\n", da.year, da.month, da.day, da.hour, da.minute, da.second);
+                printf("    <mtime>%04u-%02u-%02uT%02u:%02u:%02uZ</mtime>\n", du.year, du.month, du.day, du.hour, du.minute, du.second);
+                /*printf("%5u %c%c%c%c%c%c %10u\n",
+                 entry,
+                 (de.attr & 1 ? 'r' : '-'),
+                 (de.attr & 2 ? 'h' : '-'),
+                 (de.attr & 4 ? 's' : '-'),
+                 (de.attr & 8 ? 'v' : '-'),
+                 (de.attr & 16 ? 'd' : '-'),
+                 (de.attr & 32 ? 'a' : '-'),
+                 de.fstart);*/
+                
+                printf("  </fileobject>\n");
+                fflush(stdout);
+                
+                if (de.fnl != 0xe5 && (de.attr & 16)) {
+                    add_dot_entry(info, dot_table, de.fstart, clust, 1);
+                    /*Recurse*/
+                    retval = dfxmlify(f, full_path, info, dot_table);
+                    fseek(f, (uint64_t)(512 * fatptr->nextval) + (1+entry)*sizeof(struct direntry_s), SEEK_SET); /*Disk image cursor gets tweaked in every dfxmlify call; reset*/
+                    if (retval)
+                        break;
+                }
+            }
+		}
+	}
+    /*END COPY*/
+    info->pwd = prevpwd; /*AJN: Reset pwd after finished with this directory*/
+    return retval;
+}
+
 int main(int argc, char *argv[]) {
 	struct info_s info;
 	struct dot_table_s *dot_table;
@@ -703,6 +839,8 @@ int main(int argc, char *argv[]) {
 		ret = cat(argv[2], &info, dot_table);
 	else if (!strcmp(argv[1], "cd") && argc == 3)
 		cd(argv[2], &info, dot_table);
+    else if (!strcmp(argv[1], "dfxml") && argc == 2)
+        ret = dfxml(&info, dot_table);
 	else
 		return(usage());
 
