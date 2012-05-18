@@ -40,6 +40,13 @@ See uxtaf.txt for usage information.
 /* XXX yeah I know this is ugly... */
 #define LITTLE_ENDIAN_BOX
 
+
+#define CLUST_2_SECT(c, firstclustsect)	\
+	(firstclustsect - 1 + (c * 32))
+
+#define SECT_2_INODE(firstdatasect, s)    \
+    ((s - firstdatasect) * 8 + 3)
+
 uint16_t bswap16(uint16_t x) {
 	return(
 #ifdef LITTLE_ENDIAN_BOX
@@ -783,6 +790,9 @@ int dfxmlify(FILE *f, char *argv, struct info_s *info, struct dot_table_s **dot_
                 printf("    <crtime>%04u-%02u-%02uT%02u:%02u:%02uZ</crtime>\n", dc.year, dc.month, dc.day, dc.hour, dc.minute, dc.second);
                 printf("    <atime>%04u-%02u-%02uT%02u:%02u:%02uZ</atime>\n", da.year, da.month, da.day, da.hour, da.minute, da.second);
                 printf("    <mtime>%04u-%02u-%02uT%02u:%02u:%02uZ</mtime>\n", du.year, du.month, du.day, du.hour, du.minute, du.second);
+                int sect = (clust-1) * 32 + (entry/8);
+                int inode = 3 + 8 * sect + (entry%8);
+                printf("    <st_ino>%d </st_ino>\n", inode );
                 /*printf("%5u %c%c%c%c%c%c %10u\n",
                  entry,
                  (de.attr & 1 ? 'r' : '-'),
