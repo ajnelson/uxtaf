@@ -136,6 +136,9 @@ struct fat_s { /* 32 bits indeed... */
 	struct fat_s *next;
 };
 
+/* Prototype */
+int dfxmlify(FILE *f, char *argv, struct info_s *info, struct dot_table_s **dot_table);
+
 struct datetime_s dosdati(uint16_t date, uint16_t time) {
 	struct datetime_s dt;
 
@@ -162,21 +165,21 @@ int read_boot(FILE *f, struct boot_s *b) {
 	s = fread(&b->volid, sizeof(uint32_t), 1, f);
 	b->volid = bswap32(b->volid);
 	if (s != 1) {
-		fprintf(stderr, "read_boot: volid: s = %i\n", s);
+		fprintf(stderr, "read_boot: volid: s = %zu\n", s);
 		return(1);
 	}
 
 	s = fread(&b->spc, sizeof(uint32_t), 1, f);
 	b->spc = bswap32(b->spc);
 	if (s != 1) {
-		fprintf(stderr, "read_boot: spc: s = %i\n", s);
+		fprintf(stderr, "read_boot: spc: s = %zu\n", s);
 		return(1);
 	}
 
 	s = fread(&b->nfat, sizeof(uint32_t), 1, f);
 	b->nfat = bswap32(b->nfat);
 	if (s != 1 || b->nfat != 1) {
-		fprintf(stderr, "read_boot: nfat: s = %i nfat = %u\n", s,
+		fprintf(stderr, "read_boot: nfat: s = %zu nfat = %u\n", s,
 		    b->nfat);
 		return(1);
 	}
@@ -184,7 +187,7 @@ int read_boot(FILE *f, struct boot_s *b) {
 	s = fread(&b->zero, sizeof(uint16_t), 1, f);
 	b->zero = bswap16(b->zero);
 	if (s != 1) {
-		fprintf(stderr, "read_boot: zero: s = %i\n", s);
+		fprintf(stderr, "read_boot: zero: s = %zu\n", s);
 		return(1);
 	}
 	return(0);
@@ -211,7 +214,7 @@ struct fat_s *build_fat_chain(FILE *f, struct info_s *info, uint32_t start,
 		    info->fatmult), SEEK_SET);
 		s = fread(&cluster, info->fatmult, 1, f);
 		if (s != 1) {
-			fprintf(stderr, "build_fat_chain: s = %i\n", s);
+			fprintf(stderr, "build_fat_chain: s = %zu\n", s);
 			return(NULL);
 		}
                 fprintf(stderr, "clust = %d\n", (int) cluster);
@@ -383,7 +386,7 @@ struct direntry_s get_entry(struct info_s *info, uint32_t clust, char *filename)
 		for (entry = 0; entry < info->bootinfo.spc; entry++) {
 			s = fread(&de, sizeof(struct direntry_s), 1, f);
 			if (s != 1) {
-				fprintf(stderr, "get_entry: s = %i\n", s);
+				fprintf(stderr, "get_entry: s = %zu\n", s);
 				de.fnl = 0;
 				return(de);
 			}
@@ -476,7 +479,7 @@ int ls(struct info_s *info, struct dot_table_s **dot_table) {
 		for (entry = 0; entry < info->bootinfo.spc; entry++) {
 			s = fread(&de, sizeof(struct direntry_s), 1, f);
 			if (s != 1) {
-				fprintf(stderr, "ls: s = %i\n", s);
+				fprintf(stderr, "ls: s = %zu\n", s);
 				return(1);
 			}
 
@@ -614,7 +617,7 @@ int cat(char *argv, struct info_s *info, struct dot_table_s *dot_table) {
 
 		s = fread(buf, sizeof(char), 512 * info->bootinfo.spc, f);
 		if (s != 512 * info->bootinfo.spc) {
-			fprintf(stderr, "cat: s = %i\n", s);
+			fprintf(stderr, "cat: s = %zu\n", s);
 			return(1);
 		}
 		fwrite(buf, sizeof(char), fatptr->next != NULL || rest == 0 ?
@@ -744,7 +747,7 @@ int dfxmlify(FILE *f, char *argv, struct info_s *info, struct dot_table_s **dot_
 		for (entry = 0; entry < info->bootinfo.spc; entry++) {
 			s = fread(&de, sizeof(struct direntry_s), 1, f);
 			if (s != 1) {
-				fprintf(stderr, "dfxmlify: s = %i\n", s);
+				fprintf(stderr, "dfxmlify: s = %zu\n", s);
 				return(1);
 			}
             
