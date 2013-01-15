@@ -1,4 +1,6 @@
 uxtaf
+.deps
+*.o
 
 #Autotools output
 INSTALL
