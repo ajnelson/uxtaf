@@ -33,6 +33,7 @@ See uxtaf.txt for usage information.
 #include <string.h>
 #include <strings.h>
 #include <ctype.h>
+#include <sys/utsname.h>
 
 #include <sys/types.h>
 
@@ -714,6 +715,32 @@ int dfxml(struct info_s *info, struct dot_table_s *dot_table) {
     printf("<dfxml>\n");
     retval = dfxmlify(f, "/", info, &dot_table);
     printf("</dfxml>\n");
+
+    printf("<creator>\n");
+    printf("  <creator version='1.0'>\n");
+    printf("  <program>uxtaf</program>\n");
+    printf("  <version>0.1</version>\n"); //EQS NOTE: I made up this version #
+    printf("  <build_environment>\n");
+    printf("    <compiler>GCC %d.%d</compiler>\n",__GNUC__, __GNUC_MINOR__);
+    printf("  </build_environment>\n");
+    printf("  <execution_environment>\n");
+//#ifdef HAVE_SYS_UTSNAME_H
+    struct utsname name;
+    if(uname(&name)==0){
+	printf("    <os_sysname>%s</os_sysname>\n",name.sysname);
+	printf("    <os_release>%s</os_release>\n",name.release);
+	printf("    <os_version>%s </s_version>\n",name.version);
+	printf("    <host>%s</host>\n",name.nodename);
+	printf("    <arch>%s</arch>\n",name.machine);
+    }
+/*
+#else
+#ifdef UNAMES
+    printf("No sys/utsname, cannot print sys info\n");
+#endif
+*/
+    printf("  </execution_environment>\n");
+    printf("</creator>\n");
 	fclose(f);
     return retval;
 }
