@@ -25,6 +25,9 @@ SUCH DAMAGE.
 See uxtaf.txt for usage information.
 
 */
+
+#include "config.h"
+
 #include <errno.h>
 #include <limits.h>
 #include <stdint.h>
@@ -718,8 +721,8 @@ int dfxml(struct info_s *info, struct dot_table_s *dot_table) {
 
     printf("<creator>\n");
     printf("  <creator version='1.0'>\n");
-    printf("  <program>uxtaf</program>\n");
-    printf("  <version>0.1</version>\n"); //EQS NOTE: I made up this version #
+    printf("  <program>%s</program>\n", PACKAGE);
+    printf("  <version>%s</version>\n", PACKAGE_VERSION);
     printf("  <build_environment>\n");
     printf("    <compiler>GCC %d.%d</compiler>\n",__GNUC__, __GNUC_MINOR__);
     printf("  </build_environment>\n");
