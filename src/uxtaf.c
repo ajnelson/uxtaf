@@ -716,37 +716,35 @@ int dfxml(struct info_s *info, struct dot_table_s *dot_table) {
 
     printf("<?xml version='1.0' encoding='UTF-8'?>\n");
     printf("<dfxml>\n");
-    printf("  <creator>\n");
-    printf("    <creator version='1.0'>\n");
-    printf("    <program>%s</program>\n", PACKAGE);
-    printf("    <version>%s</version>\n", PACKAGE_VERSION);
-    printf("    <build_environment>\n");
-    printf("      <compiler>GCC %d.%d</compiler>\n",__GNUC__, __GNUC_MINOR__);
-    printf("    </build_environment>\n");
-    printf("    <execution_environment>\n");
-/*TODO Add this check (inherited from Fiwalk) back in later
-#ifdef HAVE_SYS_UTSNAME_H
-*/
+    retval = dfxmlify(f, "/", info, &dot_table);
+    printf("</dfxml>\n");
+
+    printf("<creator>\n");
+    printf("  <creator version='1.0'>\n");
+    printf("  <program>%s</program>\n", PACKAGE);
+    printf("  <version>%s</version>\n", PACKAGE_VERSION);
+    printf("  <build_environment>\n");
+    printf("    <compiler>GCC %d.%d</compiler>\n",__GNUC__, __GNUC_MINOR__);
+    printf("  </build_environment>\n");
+    printf("  <execution_environment>\n");
+//#ifdef HAVE_SYS_UTSNAME_H
     struct utsname name;
     if(uname(&name)==0){
-	printf("      <os_sysname>%s</os_sysname>\n",name.sysname);
-	printf("      <os_release>%s</os_release>\n",name.release);
-	printf("      <os_version>%s </s_version>\n",name.version);
-	printf("      <host>%s</host>\n",name.nodename);
-	printf("      <arch>%s</arch>\n",name.machine);
+	printf("    <os_sysname>%s</os_sysname>\n",name.sysname);
+	printf("    <os_release>%s</os_release>\n",name.release);
+	printf("    <os_version>%s </s_version>\n",name.version);
+	printf("    <host>%s</host>\n",name.nodename);
+	printf("    <arch>%s</arch>\n",name.machine);
     }
 /*
 #else
 #ifdef UNAMES
-    printf("      <!--No sys/utsname, cannot print sys info-->\n");
-#endif
+    printf("No sys/utsname, cannot print sys info\n");
 #endif
 */
-    printf("    </execution_environment>\n");
-    printf("  </creator>\n");
-    retval = dfxmlify(f, "/", info, &dot_table);
-    printf("</dfxml>\n");
-    fclose(f);
+    printf("  </execution_environment>\n");
+    printf("</creator>\n");
+	fclose(f);
     return retval;
 }
 
@@ -884,9 +882,16 @@ int main(int argc, char *argv[]) {
 		ret = cat(argv[2], &info, dot_table);
 	else if (!strcmp(argv[1], "cd") && argc == 3)
 		cd(argv[2], &info, dot_table);
-    else if (!strcmp(argv[1], "dfxml") && argc == 2)
+    else if (!strcmp(argv[1], "dfxml") && argc == 2){
         ret = dfxml(&info, dot_table);
-	else
+        int i;
+        printf("<source>%s </source>\n", info.imagename);
+        printf("<command line>");
+        for(i = 0; i < argc; i++){
+            printf("%s ", argv[i]);
+        }
+        printf("</command line>\n");
+	}else
 		return(usage());
 
 	if (ret != 0)
