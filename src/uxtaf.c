@@ -704,7 +704,7 @@ void write_infofile(struct info_s *info, struct dot_table_s **dot_table) {
 	fclose(infofile);
 }
 
-int dfxml(struct info_s *info, struct dot_table_s *dot_table) {
+int dfxml(struct info_s *info, struct dot_table_s *dot_table, int argc, char *argv[]) {
     int retval;
 	FILE *f;
 	f = fopen(info->imagename, "rb");
@@ -743,8 +743,15 @@ int dfxml(struct info_s *info, struct dot_table_s *dot_table) {
 #endif
 */
     printf("  </execution_environment>\n");
+      int i;
+      printf("<source>%s </source>\n", info->imagename);
+      printf("<command_line>");
+      for(i = 0; i < argc; i++){
+          printf("%s ", argv[i]);
+      }
+      printf("</command_line>\n");
     printf("</creator>\n");
-	fclose(f);
+        fclose(f);
     return retval;
 }
 
@@ -882,16 +889,9 @@ int main(int argc, char *argv[]) {
 		ret = cat(argv[2], &info, dot_table);
 	else if (!strcmp(argv[1], "cd") && argc == 3)
 		cd(argv[2], &info, dot_table);
-    else if (!strcmp(argv[1], "dfxml") && argc == 2){
-        ret = dfxml(&info, dot_table);
-        int i;
-        printf("<source>%s </source>\n", info.imagename);
-        printf("<command line>");
-        for(i = 0; i < argc; i++){
-            printf("%s ", argv[i]);
-        }
-        printf("</command line>\n");
-	}else
+    else if (!strcmp(argv[1], "dfxml") && argc == 2)
+            ret = dfxml(&info, dot_table, argc, argv);
+	else
 		return(usage());
 
 	if (ret != 0)
