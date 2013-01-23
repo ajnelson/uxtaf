@@ -36,7 +36,10 @@ See uxtaf.txt for usage information.
 #include <string.h>
 #include <strings.h>
 #include <ctype.h>
+
+#ifdef HAVE_SYS_UTSNAME_H
 #include <sys/utsname.h>
+#endif
 
 #include <sys/types.h>
 
@@ -706,6 +709,42 @@ void write_infofile(struct info_s *info, struct dot_table_s **dot_table) {
 
 int dfxml(struct info_s *info, struct dot_table_s *dot_table, int argc, char *argv[]) {
     int retval;
+
+    printf("<?xml version='1.0' encoding='UTF-8'?>\n");
+    printf("<dfxml>\n");
+
+    printf("  <creator version='1.0'>\n");
+    printf("    <program>%s</program>\n", PACKAGE);
+    printf("    <version>%s</version>\n", PACKAGE_VERSION);
+    printf("    <build_environment>\n");
+    printf("      <compiler>GCC %d.%d</compiler>\n",__GNUC__, __GNUC_MINOR__);
+    printf("    </build_environment>\n");
+    printf("    <execution_environment>\n");
+#ifdef HAVE_SYS_UTSNAME_H
+    struct utsname name;
+    if(uname(&name)==0){
+	printf("      <os_sysname>%s</os_sysname>\n",name.sysname);
+	printf("      <os_release>%s</os_release>\n",name.release);
+	printf("      <os_version>%s</os_version>\n",name.version);
+	printf("      <host>%s</host>\n",name.nodename);
+	printf("      <arch>%s</arch>\n",name.machine);
+    }
+#else
+    printf("<!--No sys/utsname, cannot print sys info-->\n");
+#endif
+    printf("    </execution_environment>\n");
+      int i;
+      printf("    <source>%s</source>\n", info->imagename);
+      printf("    <command_line>");
+      for(i = 0; i < argc; i++){
+          if (i > 0)
+            printf(" ");
+          printf("%s", argv[i]);
+      }
+      printf("    </command_line>\n");
+    printf("  </creator>\n");
+
+	//Start processing file
 	FILE *f;
 	f = fopen(info->imagename, "rb");
 	if (f == NULL) {
@@ -713,46 +752,11 @@ int dfxml(struct info_s *info, struct dot_table_s *dot_table, int argc, char *ar
                 info->imagename, errno);
 		return(errno);
 	}
-
-    printf("<?xml version='1.0' encoding='UTF-8'?>\n");
-    printf("<dfxml>\n");
-    retval = dfxmlify(f, "/", info, &dot_table);
-    printf("</dfxml>\n");
-
-    printf("<creator>\n");
-    printf("  <creator version='1.0'>\n");
-    printf("  <program>%s</program>\n", PACKAGE);
-    printf("  <version>%s</version>\n", PACKAGE_VERSION);
-    printf("  <build_environment>\n");
-    printf("    <compiler>GCC %d.%d</compiler>\n",__GNUC__, __GNUC_MINOR__);
-    printf("  </build_environment>\n");
-    printf("  <execution_environment>\n");
-//#ifdef HAVE_SYS_UTSNAME_H
-    struct utsname name;
-    if(uname(&name)==0){
-	printf("    <os_sysname>%s</os_sysname>\n",name.sysname);
-	printf("    <os_release>%s</os_release>\n",name.release);
-	printf("    <os_version>%s </s_version>\n",name.version);
-	printf("    <host>%s</host>\n",name.nodename);
-	printf("    <arch>%s</arch>\n",name.machine);
-    }
-/*
-#else
-#ifdef UNAMES
-    printf("No sys/utsname, cannot print sys info\n");
-#endif
-*/
-    printf("  </execution_environment>\n");
-      int i;
-      printf("<source>%s </source>\n", info->imagename);
-      printf("<command_line>");
-      for(i = 0; i < argc; i++){
-          printf("%s ", argv[i]);
-      }
-      printf("</command_line>\n");
-    printf("</creator>\n");
+	retval = dfxmlify(f, "/", info, &dot_table);
         fclose(f);
-    return retval;
+
+	printf("</dfxml>\n");
+	return retval;
 }
 
 int dfxmlify(FILE *f, char *argv, struct info_s *info, struct dot_table_s **dot_table) {
@@ -889,8 +893,8 @@ int main(int argc, char *argv[]) {
 		ret = cat(argv[2], &info, dot_table);
 	else if (!strcmp(argv[1], "cd") && argc == 3)
 		cd(argv[2], &info, dot_table);
-    else if (!strcmp(argv[1], "dfxml") && argc == 2)
-            ret = dfxml(&info, dot_table, argc, argv);
+	else if (!strcmp(argv[1], "dfxml") && argc == 2)
+		ret = dfxml(&info, dot_table, argc, argv);
 	else
 		return(usage());
 
