@@ -1,7 +1,7 @@
 #                                               -*- Autoconf -*-
 # Process this file with autoconf to produce a configure script.
 
-AC_PREREQ([2.68])
+AC_PREREQ([2.67])
 AC_INIT([uxtaf], [0.1.0], [r.c.ladan@gmail.com])
 AM_INIT_AUTOMAKE
 AC_CONFIG_SRCDIR([src/uxtaf.c])
@@ -24,7 +24,7 @@ AC_TYPE_UINT8_T
 
 # Checks for library functions.
 AC_FUNC_FSEEKO
-AC_CHECK_FUNCS([bzero strdup])
+AC_CHECK_FUNCS([bzero strdup uname])
 
 AC_CONFIG_FILES([Makefile
                  src/Makefile])
