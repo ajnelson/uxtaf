@@ -847,6 +847,35 @@ int dfxmlify(FILE *f, char *argv, struct info_s *info, struct dot_table_s **dot_
                  (de.attr & 32 ? 'a' : '-'),
                  de.fstart);*/
                 
+                /* Build byte runs if possible */
+                struct fat_s *fatptr = build_fat_chain(f, info, de.fstart, de.fsize);
+                if (fat_s != NULL) {
+                    printf("    <byte_runs>\n")
+                    /* fsize_accounted: number of bytes accounted for following fat chain.  If this ends up unequal to de.fsize, there is a data anomaly. */
+                    size_t fsize_accounted = 0;
+                    size_t full_csize = 512 * info->bootinfo.spc;
+                    size_t this_csize = full_csize;
+                    while (fatptr != NULL) {
+                        printf("      <byte_run");
+                        printf(" file_offset='%d'", fsize_accounted);
+                        //TODO printf(" fs_offset=''");
+                        //TODO printf(" img_offset=''");
+                        if (fsize_accounted + full_csize > de.fsize) {
+                            this_csize = de.fsize - fsize_accounted;
+                        }
+                        printf(" len='%d'", this_csize);
+                        printf(">\n");
+                        fsize_accounted += this_csize;
+                        fatptr = fatptr->next;
+                    }
+                    /* Squawk if there's a byte discrepancy, to stderr and to the XML */
+                    if (fsize_accounted != de.fsize) {
+                        printf("      <!-- Warning: Fat chain terminated before all bytes in the file were accounted for.  (%d bytes remaining.) -->\n", de.fsize - fsize_accounted);
+                        fprintf(stderr, "Warning: Fat chain terminated before all bytes in the file were accounted for.  (%d bytes remaining.)\n", de.fsize - fsize_accounted);
+                    }
+                    printf("    </byte_runs>\n");
+                }
+
                 printf("  </fileobject>\n");
                 fflush(stdout);
                 
