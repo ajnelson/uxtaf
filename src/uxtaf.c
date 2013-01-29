@@ -824,7 +824,7 @@ int dfxmlify(FILE *f, char *argv, struct info_s *info, struct dot_table_s **dot_
 					}
 				}
 			else
-				strncpy(fname, de.name, de.fnl);
+				strncpy(fname, de.name, (de.fnl < 42 ? de.fnl : 42));
             /*AJN Check name for unprintable characters. That's a good indication that this isn't supposed to be a directory entry.*/
             is_dent = 1;
             for (i = 0; i < 42; i++)
