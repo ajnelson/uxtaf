@@ -768,7 +768,7 @@ int dfxmlify(FILE *f, char *argv, struct info_s *info, struct dot_table_s **dot_
 	struct datetime_s da, dc, du;
 	int i, entry;
 	size_t s;
-	struct fat_s *fatptr;
+	struct fat_s *fatptr, *sizefatptr;
 	uint32_t clust;
     int is_dir;
     char full_path[4096]; /*AJN Maybe overkill?*/
@@ -798,7 +798,21 @@ int dfxmlify(FILE *f, char *argv, struct info_s *info, struct dot_table_s **dot_
 				continue; /* to next slot */
             
 			de.fstart = bswap32(de.fstart);
-			de.fsize = bswap32(de.fsize);
+
+			/* Special consideration: directories have their sizes recorded as 0, but Fiwalk records the size of the clusters used (not considering the proportion of the clusters used).  Record here directory size as their fat chain length. This differs from the copy-pasted logic.*/
+			if (de.attr & 16) {
+				de.fsize = 0;
+				for (
+				  sizefatptr = build_fat_chain(f, info, de.fstart, 0, de.attr);
+				  sizefatptr != NULL;
+				  sizefatptr = sizefatptr->next
+				) {
+					de.fsize += 512 * info->bootinfo.spc;
+				}
+			} else {
+				de.fsize = bswap32(de.fsize);
+			}
+
 			bzero(fname, 43 * sizeof(char));
 			if (de.fnl == 0xe5 || de.fnl > 42)
 				for (i = 0; i < 42; i++) {
