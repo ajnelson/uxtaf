@@ -201,7 +201,7 @@ int read_boot(FILE *f, struct boot_s *b) {
 }
 
 struct fat_s *build_fat_chain(FILE *f, struct info_s *info, uint32_t start,
-    uint32_t size) {
+    uint32_t size, uint8_t dentry_attr) {
 	struct fat_s *head, *list, *this;
 	size_t s;
 	uint32_t cluster, nc;
@@ -246,8 +246,10 @@ struct fat_s *build_fat_chain(FILE *f, struct info_s *info, uint32_t start,
 		list->next = this;
 		list = list->next;
 	}
-	if (nc > 0) {
-		fprintf(stderr, "build_fat_chain: %u clusters left\n", nc);
+	/* Die if file size mismatches; directories don't report size,
+           so fat chain is the authority on length */
+	if (nc > 0 && ! (dentry_attr & 16)) {
+		fprintf(stderr, "build_fat_chain: %u clusters left in regular file\n", nc);
 		exit(1);
 	}
 	list->next = NULL;
@@ -387,7 +389,7 @@ struct direntry_s get_entry(struct info_s *info, uint32_t clust, char *filename)
 		de.fnl = 0;
 		return(de);
 	}
-	for (fatptr = build_fat_chain(f, info, clust, 512 * info->bootinfo.spc);
+	for (fatptr = build_fat_chain(f, info, clust, 512 * info->bootinfo.spc, 0);
 	    fatptr != NULL; fatptr = fatptr->next) {
 		fseek(f, (uint64_t)(512 * fatptr->nextval), SEEK_SET);
 		for (entry = 0; entry < info->bootinfo.spc; entry++) {
@@ -476,7 +478,7 @@ int ls(struct info_s *info, struct dot_table_s **dot_table) {
 		return(errno);
 	}
 	clust = (info->pwd - info->rootstart) / info->bootinfo.spc + 1;
-	for (fatptr = build_fat_chain(f, info, clust, 512 * info->bootinfo.spc);
+	for (fatptr = build_fat_chain(f, info, clust, 512 * info->bootinfo.spc, 0);
 	    fatptr != NULL; fatptr = fatptr->next) {
 		fseek(f, (uint64_t)(512 * fatptr->nextval), SEEK_SET);
 
@@ -618,7 +620,7 @@ int cat(char *argv, struct info_s *info, struct dot_table_s *dot_table) {
 		return(errno);
 	}
 	buf = calloc(512 * info->bootinfo.spc, sizeof(char));
-	for (fatptr = build_fat_chain(f, info, de.fstart, de.fsize);
+	for (fatptr = build_fat_chain(f, info, de.fstart, de.fsize, de.attr);
 	    fatptr != NULL; fatptr = fatptr->next) {
 		fseek(f, (uint64_t)(512 * fatptr->nextval), SEEK_SET);
 
@@ -778,7 +780,7 @@ int dfxmlify(FILE *f, char *argv, struct info_s *info, struct dot_table_s **dot_
 	/*BEGIN COPY*/
     
 	clust = (info->pwd - info->rootstart) / info->bootinfo.spc + 1;
-	for (fatptr = build_fat_chain(f, info, clust, 512 * info->bootinfo.spc);
+	for (fatptr = build_fat_chain(f, info, clust, 512 * info->bootinfo.spc, 0);
          fatptr != NULL; fatptr = fatptr->next) {
 		fseek(f, (uint64_t)(512 * fatptr->nextval), SEEK_SET);
         
@@ -848,14 +850,14 @@ int dfxmlify(FILE *f, char *argv, struct info_s *info, struct dot_table_s **dot_
                  de.fstart);*/
                 
                 /* Build byte runs if possible */
-                struct fat_s *fatptr = build_fat_chain(f, info, de.fstart, de.fsize);
-                if (fat_s != NULL) {
-                    printf("    <byte_runs>\n")
+                struct fat_s *brfatptr = build_fat_chain(f, info, de.fstart, de.fsize, de.attr);
+                if (fatptr != NULL) {
+                    printf("    <byte_runs>\n");
                     /* fsize_accounted: number of bytes accounted for following fat chain.  If this ends up unequal to de.fsize, there is a data anomaly. */
-                    size_t fsize_accounted = 0;
-                    size_t full_csize = 512 * info->bootinfo.spc;
-                    size_t this_csize = full_csize;
-                    while (fatptr != NULL) {
+                    uint32_t fsize_accounted = 0;
+                    uint32_t full_csize = 512 * info->bootinfo.spc;
+                    uint32_t this_csize = full_csize;
+                    while (brfatptr != NULL) {
                         printf("      <byte_run");
                         printf(" file_offset='%d'", fsize_accounted);
                         //TODO printf(" fs_offset=''");
@@ -866,7 +868,7 @@ int dfxmlify(FILE *f, char *argv, struct info_s *info, struct dot_table_s **dot_
                         printf(" len='%d'", this_csize);
                         printf(">\n");
                         fsize_accounted += this_csize;
-                        fatptr = fatptr->next;
+                        brfatptr = brfatptr->next;
                     }
                     /* Squawk if there's a byte discrepancy, to stderr and to the XML */
                     if (fsize_accounted != de.fsize) {
