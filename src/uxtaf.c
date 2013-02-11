@@ -222,10 +222,10 @@ struct fat_s *build_fat_chain(FILE *f, struct info_s *info, uint32_t start,
 		s = fread(&cluster, info->fatmult, 1, f);
 		if (s != 1) {
 			fprintf(stderr, "build_fat_chain: s = %zu\n", s);
-			fprintf(stderr, "build_fat_chain: (start = %" PRIu32 ")\n", start);
-			fprintf(stderr, "build_fat_chain: (size = %" PRIu32 ")\n", size);
-			fprintf(stderr, "build_fat_chain: (nc = %" PRIu32 ")\n", nc);
-			fprintf(stderr, "build_fat_chain: (cluster = %" PRIu32 ")\n", cluster);
+			fprintf(stderr, "build_fat_chain: (start = %zu)\n", start);
+			fprintf(stderr, "build_fat_chain: (size = %zu)\n", size);
+			fprintf(stderr, "build_fat_chain: (nc = %zu)\n", nc);
+			fprintf(stderr, "build_fat_chain: (cluster = %zu)\n", cluster);
 			return(NULL);
 		}
                 fprintf(stderr, "clust = %d\n", (int) cluster);
