@@ -772,6 +772,7 @@ int dfxmlify(FILE *f, char *argv, struct info_s *info, struct dot_table_s **dot_
 	struct datetime_s da, dc, du;
 	int i, entry;
 	size_t s;
+	off_t dir_off;
 	struct fat_s *fatptr, *sizefatptr;
 	uint32_t clust;
     int is_dir;
@@ -787,11 +788,13 @@ int dfxmlify(FILE *f, char *argv, struct info_s *info, struct dot_table_s **dot_
 	for (fatptr = build_fat_chain(f, info, clust, 512 * info->bootinfo.spc, 0);
          fatptr != NULL; fatptr = fatptr->next) {
 		fseek(f, (uint64_t)(512 * fatptr->nextval), SEEK_SET);
+		dir_off = ftell(f);
         
 		/*printf("entry fnl rhsvda startclust   filesize    "
                "create_date_time    access_date_time    update_date_time "
                "filename\n");*/
 		for (entry = 0; entry < info->bootinfo.spc; entry++) {
+			fseek(f, dir_off, SEEK_SET); /*Reset file pointer, in case build_fat_chain reads and doesn't clean up state*/
 			s = fread(&de, sizeof(struct direntry_s), 1, f);
 			if (s != 1) {
 				fprintf(stderr, "dfxmlify: s = %zu\n", s);
