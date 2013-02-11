@@ -207,7 +207,7 @@ struct fat_s *build_fat_chain(FILE *f, struct info_s *info, uint32_t start,
 	uint32_t cluster, nc;
 
 
-        fprintf(stderr, "start = %d\n", (int) start);
+        //Debug fprintf(stderr, "build_fat_chain: Debug: start = %d\n", (int) start);
 	head = calloc(1, sizeof(struct fat_s));
 	head->nextval = (start - 1) * info->bootinfo.spc + info->rootstart;
 	list = head;
@@ -228,7 +228,7 @@ struct fat_s *build_fat_chain(FILE *f, struct info_s *info, uint32_t start,
 			fprintf(stderr, "build_fat_chain: (cluster = %zu)\n", cluster);
 			return(NULL);
 		}
-                fprintf(stderr, "clust = %d\n", (int) cluster);
+                //Debug fprintf(stderr, "build_fat_chain: Debug: clust = %d\n", (int) cluster);
 		cluster = info->fatmult == 2 ? bswap16(cluster) :
 		    bswap32(cluster);
 		cluster &= info->fatmask;
@@ -598,7 +598,7 @@ void cd(char *argv, struct info_s *info, struct dot_table_s *dot_table) {
 		info->pwd = (de.fstart - 1) * info->bootinfo.spc +
 		    info->rootstart;
 
-	fprintf(stderr, "new pwd = %u sectors @ 0x%llx bytes\n", info->pwd,
+	fprintf(stderr, "cd: Debug: new pwd = %u sectors @ 0x%llx bytes\n", info->pwd,
 	    (uint64_t)(info->pwd * 512));
 }
 
@@ -788,13 +788,14 @@ int dfxmlify(FILE *f, char *argv, struct info_s *info, struct dot_table_s **dot_
 	for (fatptr = build_fat_chain(f, info, clust, 512 * info->bootinfo.spc, 0);
          fatptr != NULL; fatptr = fatptr->next) {
 		fseek(f, (uint64_t)(512 * fatptr->nextval), SEEK_SET);
-		dir_off = ftell(f);
+		dir_off = ftello(f);
+		if (dir_off == -1); //TODO Handle ftello failing.
         
 		/*printf("entry fnl rhsvda startclust   filesize    "
                "create_date_time    access_date_time    update_date_time "
                "filename\n");*/
 		for (entry = 0; entry < info->bootinfo.spc; entry++) {
-			fseek(f, dir_off, SEEK_SET); /*Reset file pointer, in case build_fat_chain reads and doesn't clean up state*/
+//			fseek(f, dir_off, SEEK_SET); /*Reset file pointer, in case build_fat_chain reads and doesn't clean up state*/
 			s = fread(&de, sizeof(struct direntry_s), 1, f);
 			if (s != 1) {
 				fprintf(stderr, "dfxmlify: s = %zu\n", s);
@@ -807,18 +808,19 @@ int dfxmlify(FILE *f, char *argv, struct info_s *info, struct dot_table_s **dot_
 			de.fstart = bswap32(de.fstart);
 
 			/* Special consideration: directories have their sizes recorded as 0, but Fiwalk records the size of the clusters used (not considering the proportion of the clusters used).  Record here directory size as their fat chain length. This differs from the copy-pasted logic.*/
-			if (de.attr & 16) {
-				de.fsize = 0;
-				for (
-				  sizefatptr = build_fat_chain(f, info, de.fstart, 0, de.attr);
-				  sizefatptr != NULL;
-				  sizefatptr = sizefatptr->next
-				) {
-					de.fsize += 512 * info->bootinfo.spc;
-				}
-			} else {
+			//TODO build_fat_chain isn't liking this; debug.
+//			if (de.attr & 16) {
+//				de.fsize = 0;
+//				for (
+//				  sizefatptr = build_fat_chain(f, info, de.fstart, 0, de.attr);
+//				  sizefatptr != NULL;
+//				  sizefatptr = sizefatptr->next
+//				) {
+//					de.fsize += 512 * info->bootinfo.spc;
+//				}
+//			} else {
 				de.fsize = bswap32(de.fsize);
-			}
+//			}
 
 			bzero(fname, 43 * sizeof(char));
 			if (de.fnl == 0xe5 || de.fnl > 42)
