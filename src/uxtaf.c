@@ -324,11 +324,33 @@ int attach(struct info_s *info, struct dot_table_s **dot_table) {
 		return(errno);
 	}
 
-	if (info->imageoffset != 0) {
-		/* TODO Decide on partitionsize with an if-ladder */
-		info->partitionsize = info->mediasize;
-	} else {
-		info->partitionsize = info->mediasize;
+	switch (info->imageoffset) {
+		/* TODO Populate partition sizes */
+		case 0x0:
+			info->partitionsize = info->mediasize;
+		break;
+		case 0x80000:
+			info->partitionsize = info->mediasize;
+		break;
+		case 0x80080000:
+			info->partitionsize = info->mediasize;
+		break;
+		case 0x10c080000:
+			info->partitionsize = info->mediasize;
+		break;
+		case 0x118eb0000:
+			info->partitionsize = info->mediasize;
+		break;
+		case 0x120eb0000:
+			info->partitionsize = info->mediasize;
+		break;
+		case 0x130eb0000:
+			info->partitionsize = info->mediasize;
+		break;
+		default:
+			fprintf(stderr, "Warning: Unknown partition offset; defaulting to remaining media size.  This probably won't end well.\n"); /*TODO Add partition to this*/
+			info->partitionsize = info->mediasize - info->imageoffset;
+		break;
 	}
 
 	if (read_boot(f, &info->bootinfo)) {
