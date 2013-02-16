@@ -135,6 +135,7 @@ struct info_s {
 	uint32_t numclusters;
 	uint64_t mediasize;
 	uint32_t fatsecs;
+	off_t imageoffset; /* offset within the image file (for a partition within a disk image) */
 	char imagename[256]; /* max file name length */
 };
 
@@ -932,10 +933,18 @@ int main(int argc, char *argv[]) {
 	if (strcmp(argv[1], "attach"))
 		read_infofile(&info, &dot_table);
 
-	if (!strcmp(argv[1], "attach") && argc == 3) {
+	if (!strcmp(argv[1], "attach") && (argc == 3 || argc == 4)) {
+		/* Assign image file name to info struct */
 		for (i = 0; i < 255 && i < strlen(argv[2]); i++)
 			info.imagename[i] = argv[2][i];
 		info.imagename[i] = '\0';
+		/* Assign offset of the partition within the image file to info struct */
+		if (argc == 4) {
+			info.imageoffset = argv[3];
+		} else {
+			/* Default 0 */
+			info.imageoffset = 0;
+		}
 		ret = attach(&info, &dot_table);
 	} else if (!strcmp(argv[1], "info") && argc == 2)
 		show_info(&info);
