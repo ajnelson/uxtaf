@@ -221,6 +221,9 @@ struct fat_s *build_fat_chain(FILE *f, struct info_s *info, uint32_t start,
 	for (;;) {
 		rc = fseeko(f, (uint64_t)(info->fatstart * 512 + cluster *
 		    info->fatmult), SEEK_SET);
+		if (rc < 0) {
+			fprintf(stderr, "build_fat_chain: fseeko error, errno %d", errno);
+		}
 		s = fread(&cluster, info->fatmult, 1, f);
 		if (s != 1) {
 			fprintf(stderr, "build_fat_chain: s = %zu\n", s);
@@ -301,11 +304,17 @@ int attach(struct info_s *info, struct dot_table_s **dot_table) {
 		return(errno);
 	}
 	rc = fseeko(f, 0LL, SEEK_END);
+	if (rc < 0) {
+		fprintf(stderr, "attach: fseeko (first call) error, errno %d", errno);
+	}
 	info->mediasize = 0;
 	if (ftello(f) != -1)
 		info->mediasize = ftello(f);
 	if (info->mediasize > 0) {
 		rc = fseeko(f, 0LL, SEEK_SET);
+		if (rc < 0) {
+			fprintf(stderr, "attach: fseeko (second call) error, errno %d", errno);
+		}
 	} else {
 		fprintf(stderr, "attach: fseeko: errno = %i\n", errno);
 		fclose(f);
@@ -346,6 +355,9 @@ int attach(struct info_s *info, struct dot_table_s **dot_table) {
 	    info->rootstart % info->bootinfo.spc);
 	/* correct for hd quirk */
 	rc = fseeko(f, (uint64_t)info->rootstart * 512, SEEK_SET);
+	if (rc < 0) {
+		fprintf(stderr, "attach: fseeko (third call) error, errno %d", errno);
+	}
 	s = fread(quirkblk, sizeof(uint8_t), 4096, f);
 	if (s != 4096) {
 		fprintf(stderr, "attach: block read error!\n");
@@ -400,6 +412,9 @@ struct direntry_s get_entry(struct info_s *info, uint32_t clust, char *filename)
 	for (fatptr = build_fat_chain(f, info, clust, 512 * info->bootinfo.spc, 0);
 	    fatptr != NULL; fatptr = fatptr->next) {
 		rc = fseek(f, (uint64_t)(512 * fatptr->nextval), SEEK_SET);
+		if (rc < 0) {
+			fprintf(stderr, "get_entry: fseek error, errno %d", errno);
+		}
 		for (entry = 0; entry < info->bootinfo.spc; entry++) {
 			s = fread(&de, sizeof(struct direntry_s), 1, f);
 			if (s != 1) {
@@ -490,6 +505,9 @@ int ls(struct info_s *info, struct dot_table_s **dot_table) {
 	for (fatptr = build_fat_chain(f, info, clust, 512 * info->bootinfo.spc, 0);
 	    fatptr != NULL; fatptr = fatptr->next) {
 		rc = fseek(f, (uint64_t)(512 * fatptr->nextval), SEEK_SET);
+		if (rc < 0) {
+			fprintf(stderr, "ls: fseeko error, errno %d", errno);
+		}
 
 		printf("entry fnl rhsvda startclust   filesize    "
 		    "create_date_time    access_date_time    update_date_time "
@@ -633,6 +651,9 @@ int cat(char *argv, struct info_s *info, struct dot_table_s *dot_table) {
 	for (fatptr = build_fat_chain(f, info, de.fstart, de.fsize, de.attr);
 	    fatptr != NULL; fatptr = fatptr->next) {
 		rc = fseek(f, (uint64_t)(512 * fatptr->nextval), SEEK_SET);
+		if (rc < 0) {
+			fprintf(stderr, "cat: fseeko error, errno %d", errno);
+		}
 
 		s = fread(buf, sizeof(char), 512 * info->bootinfo.spc, f);
 		if (s != 512 * info->bootinfo.spc) {
@@ -818,6 +839,9 @@ int dfxmlify(FILE *f, char *argv, struct info_s *info, struct dot_table_s **dot_
 	  fatptr != NULL;
 	  fatptr = fatptr->next) {
 		rc = fseek(f, (uint64_t)(512 * fatptr->nextval), SEEK_SET);
+		if (rc < 0) {
+			fprintf(stderr, "dfxmlify: fseeko error, errno %d", errno);
+		}
 		dir_off = ftello(f);
 		if (dir_off == -1); //TODO Handle ftello failing.
         
@@ -939,6 +963,9 @@ int dfxmlify(FILE *f, char *argv, struct info_s *info, struct dot_table_s **dot_
                     /*Recurse*/
                     retval = dfxmlify(f, full_path, info, dot_table);
                     rc = fseek(f, (uint64_t)(512 * fatptr->nextval) + (1+entry)*sizeof(struct direntry_s), SEEK_SET); /*Disk image cursor gets tweaked in every dfxmlify call; reset*/
+			if (rc < 0) {
+				fprintf(stderr, "dfxmlify: fseek error, errno %d", errno);
+			}
                     if (retval)
                         break;
                 }
