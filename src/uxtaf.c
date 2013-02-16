@@ -759,15 +759,18 @@ int dfxml(struct info_s *info, struct dot_table_s *dot_table, int argc, char *ar
                 info->imagename, errno);
 		return(errno);
 	}
+	printf("  <volume>\n");
 	retval = dfxmlify(f, "/", info, &dot_table);
+	printf("  </volume>\n");
         fclose(f);
 
 	printf("</dfxml>\n");
 	return retval;
 }
 
+/* Convert an entire partition to DFXML */
 int dfxmlify(FILE *f, char *argv, struct info_s *info, struct dot_table_s **dot_table) {
-    int retval = 0;
+	int retval = 0;
 	struct direntry_s de;
 	char fname[43];
 	struct datetime_s da, dc, du;
@@ -776,18 +779,20 @@ int dfxmlify(FILE *f, char *argv, struct info_s *info, struct dot_table_s **dot_
 	off_t dir_off;
 	struct fat_s *fatptr, *sizefatptr;
 	uint32_t clust;
-    int is_dir;
-    char full_path[4096]; /*AJN Maybe overkill?*/
-    int concat_retval;
-    int is_dent;
+	int is_dir;
+	char full_path[4096]; /*AJN Maybe overkill?*/
+	int concat_retval;
+	int is_dent;
     
-    uint32_t prevpwd = info->pwd; /*AJN: Note that cd() only mutates info->pwd*/
-    cd(argv, info, *dot_table);
+	uint32_t prevpwd = info->pwd; /*AJN: Note that cd() only mutates info->pwd*/
+	cd(argv, info, *dot_table);
 	/*BEGIN COPY*/
     
 	clust = (info->pwd - info->rootstart) / info->bootinfo.spc + 1;
-	for (fatptr = build_fat_chain(f, info, clust, 512 * info->bootinfo.spc, 0);
-         fatptr != NULL; fatptr = fatptr->next) {
+	for (
+	  fatptr = build_fat_chain(f, info, clust, 512 * info->bootinfo.spc, 0);
+	  fatptr != NULL;
+	  fatptr = fatptr->next) {
 		fseek(f, (uint64_t)(512 * fatptr->nextval), SEEK_SET);
 		dir_off = ftello(f);
 		if (dir_off == -1); //TODO Handle ftello failing.
@@ -842,7 +847,7 @@ int dfxmlify(FILE *f, char *argv, struct info_s *info, struct dot_table_s **dot_
                     is_dent = 0;
             if (is_dent == 0)
                 continue; /*AJN Of course, the rest of the directory's probably dead at this point.*/
-            printf("  <fileobject>\n");
+            printf("    <fileobject>\n");
 			dc = dosdati(bswap16(de.cdate), bswap16(de.ctime));
 			da = dosdati(bswap16(de.adate), bswap16(de.atime));
 			du = dosdati(bswap16(de.udate), bswap16(de.utime));
@@ -854,15 +859,15 @@ int dfxmlify(FILE *f, char *argv, struct info_s *info, struct dot_table_s **dot_
                 retval = concat_retval;
                 fprintf(stderr, "dfxmlify: snprintf: Some kind of error forming the full path.\n");
             } else {
-                printf("    <filename>%s</filename>\n",full_path+1); /*AJN DFXML has a history of not starting paths with '/'*/
-                printf("    <misc name='fnl'>%3u</misc>\n", de.fnl); /*AJN Not sure at the moment what 'fnl' stands for*/
-                printf("    <filesize>%d</filesize>\n", de.fsize);
-                printf("    <crtime>%04u-%02u-%02uT%02u:%02u:%02uZ</crtime>\n", dc.year, dc.month, dc.day, dc.hour, dc.minute, dc.second);
-                printf("    <atime>%04u-%02u-%02uT%02u:%02u:%02uZ</atime>\n", da.year, da.month, da.day, da.hour, da.minute, da.second);
-                printf("    <mtime>%04u-%02u-%02uT%02u:%02u:%02uZ</mtime>\n", du.year, du.month, du.day, du.hour, du.minute, du.second);
+                printf("      <filename>%s</filename>\n",full_path+1); /*AJN DFXML has a history of not starting paths with '/'*/
+                printf("      <misc name='fnl'>%3u</misc>\n", de.fnl); /*AJN Not sure at the moment what 'fnl' stands for*/
+                printf("      <filesize>%d</filesize>\n", de.fsize);
+                printf("      <crtime>%04u-%02u-%02uT%02u:%02u:%02uZ</crtime>\n", dc.year, dc.month, dc.day, dc.hour, dc.minute, dc.second);
+                printf("      <atime>%04u-%02u-%02uT%02u:%02u:%02uZ</atime>\n", da.year, da.month, da.day, da.hour, da.minute, da.second);
+                printf("      <mtime>%04u-%02u-%02uT%02u:%02u:%02uZ</mtime>\n", du.year, du.month, du.day, du.hour, du.minute, du.second);
                 int sect = (clust-1) * 32 + (entry/8);
                 int inode = 3 + 8 * sect + (entry%8);
-                printf("    <st_ino>%d </st_ino>\n", inode );
+                printf("      <st_ino>%d </st_ino>\n", inode );
                 /*printf("%5u %c%c%c%c%c%c %10u\n",
                  entry,
                  (de.attr & 1 ? 'r' : '-'),
@@ -876,13 +881,13 @@ int dfxmlify(FILE *f, char *argv, struct info_s *info, struct dot_table_s **dot_
                 /* Build byte runs if possible */
                 struct fat_s *brfatptr = build_fat_chain(f, info, de.fstart, de.fsize, de.attr);
                 if (fatptr != NULL) {
-                    printf("    <byte_runs>\n");
+                    printf("      <byte_runs>\n");
                     /* fsize_accounted: number of bytes accounted for following fat chain.  If this ends up unequal to de.fsize, there is a data anomaly. */
                     uint32_t fsize_accounted = 0;
                     uint32_t full_csize = 512 * info->bootinfo.spc;
                     uint32_t this_csize = full_csize;
                     while (brfatptr != NULL) {
-                        printf("      <byte_run");
+                        printf("        <byte_run");
                         printf(" file_offset='%d'", fsize_accounted);
                         //TODO printf(" fs_offset=''");
                         //TODO printf(" img_offset=''");
@@ -896,13 +901,13 @@ int dfxmlify(FILE *f, char *argv, struct info_s *info, struct dot_table_s **dot_
                     }
                     /* Squawk if there's a byte discrepancy, to stderr and to the XML */
                     if (fsize_accounted != de.fsize) {
-                        printf("      <!-- Warning: Fat chain terminated before all bytes in the file were accounted for.  (%d bytes remaining.) -->\n", de.fsize - fsize_accounted);
+                        printf("        <!-- Warning: Fat chain terminated before all bytes in the file were accounted for.  (%d bytes remaining.) -->\n", de.fsize - fsize_accounted);
                         fprintf(stderr, "Warning: Fat chain terminated before all bytes in the file were accounted for.  (%d bytes remaining.)\n", de.fsize - fsize_accounted);
                     }
-                    printf("    </byte_runs>\n");
+                    printf("      </byte_runs>\n");
                 }
 
-                printf("  </fileobject>\n");
+                printf("    </fileobject>\n");
                 fflush(stdout);
                 
                 if (de.fnl != 0xe5 && (de.attr & 16)) {
@@ -916,9 +921,10 @@ int dfxmlify(FILE *f, char *argv, struct info_s *info, struct dot_table_s **dot_
             }
 		}
 	}
-    /*END COPY*/
-    info->pwd = prevpwd; /*AJN: Reset pwd after finished with this directory*/
-    return retval;
+	/*END COPY*/
+	info->pwd = prevpwd; /*AJN: Reset pwd after finished with this directory*/
+	fflush(stdout);
+	return retval;
 }
 
 int main(int argc, char *argv[]) {
