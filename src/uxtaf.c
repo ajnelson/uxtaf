@@ -133,7 +133,8 @@ struct info_s {
 	uint32_t firstcluster;
 	uint32_t maxcluster;
 	uint32_t numclusters;
-	uint64_t mediasize;
+	uint64_t partitionsize;
+	uint64_t mediasize; /* TODO Distinguish in code between media size and partition size */
 	uint32_t fatsecs;
 	off_t imageoffset; /* offset within the image file (for a partition within a disk image) */
 	char imagename[256]; /* max file name length */
@@ -219,7 +220,7 @@ struct fat_s *build_fat_chain(FILE *f, struct info_s *info, uint32_t start,
 	if (size % (512 * info->bootinfo.spc) > 0)
 		nc++;
 	for (;;) {
-		rc = fseeko(f, (uint64_t)(info->fatstart * 512 + cluster *
+		rc = fseeko(f, (uint64_t)(info->imageoffset + info->fatstart * 512 + cluster *
 		    info->fatmult), SEEK_SET);
 		if (rc < 0) {
 			fprintf(stderr, "build_fat_chain: fseeko error, errno %d", errno);
@@ -279,13 +280,15 @@ void add_dot_entry(struct info_s *info, struct dot_table_s **dot_table, uint32_t
 	struct dot_table_s *newdot;
     
 	if (!check || find_dot_entry(*dot_table, cluster) == DOT_NOT_FOUND) {
-        if (info->bootinfo.spc * 512 * cluster < info->mediasize) { /*AJN Prevent segfaults caused by reading outside image size*/
-            newdot = calloc(1, sizeof(struct dot_table_s));
-            newdot->this = cluster;
-            newdot->parent = parent;
-            newdot->next = *dot_table;
-            *dot_table = newdot;
-        }
+		if (info->bootinfo.spc * 512 * cluster < info->partitionsize) { /*AJN Prevent segfaults caused by reading outside image or partition size*/
+			newdot = calloc(1, sizeof(struct dot_table_s));
+			newdot->this = cluster;
+			newdot->parent = parent;
+			newdot->next = *dot_table;
+			*dot_table = newdot;
+		} else {
+			fprintf(stderr, "add_dot_entry: Warning: Skipped adding a dot entry for out-of-bounds cluster %zu", cluster);
+		}
 	}
 }
 
@@ -321,6 +324,13 @@ int attach(struct info_s *info, struct dot_table_s **dot_table) {
 		return(errno);
 	}
 
+	if (info->imageoffset != 0) {
+		/* TODO Decide on partitionsize with an if-ladder */
+		info->partitionsize = info->mediasize;
+	} else {
+		info->partitionsize = info->mediasize;
+	}
+
 	if (read_boot(f, &info->bootinfo)) {
 		fclose(f);
 		return(1);
@@ -335,7 +345,7 @@ int attach(struct info_s *info, struct dot_table_s **dot_table) {
 	}
 
 	/* calculate # of FAT sectors in sectors */
-	info->numclusters = info->mediasize / (512 * info->bootinfo.spc);
+	info->numclusters = info->partitionsize / (512 * info->bootinfo.spc);
 	if (info->numclusters >= 0xfff4) {
 		info->fatmask = FAT32_MASK;
 		info->fatmult = 4;
@@ -354,7 +364,7 @@ int attach(struct info_s *info, struct dot_table_s **dot_table) {
 	    info->rootstart / info->bootinfo.spc,
 	    info->rootstart % info->bootinfo.spc);
 	/* correct for hd quirk */
-	rc = fseeko(f, (uint64_t)info->rootstart * 512, SEEK_SET);
+	rc = fseeko(f, (uint64_t)info->imageoffset + info->rootstart * 512, SEEK_SET);
 	if (rc < 0) {
 		fprintf(stderr, "attach: fseeko (third call) error, errno %d", errno);
 	}
@@ -374,7 +384,7 @@ int attach(struct info_s *info, struct dot_table_s **dot_table) {
 	    info->rootstart % info->bootinfo.spc);
 
 	info->firstcluster = info->rootstart + info->bootinfo.spc;
-	info->maxcluster = (info->mediasize / 512 - info->firstcluster) /
+	info->maxcluster = (info->partitionsize/ 512 - info->firstcluster) /
 	    info->bootinfo.spc + 1;
 	if (info->maxcluster >= info->numclusters) {
 		fprintf(stderr, "attach: numclusters (%u) exceeds FAT capacity "
@@ -411,7 +421,7 @@ struct direntry_s get_entry(struct info_s *info, uint32_t clust, char *filename)
 	}
 	for (fatptr = build_fat_chain(f, info, clust, 512 * info->bootinfo.spc, 0);
 	    fatptr != NULL; fatptr = fatptr->next) {
-		rc = fseek(f, (uint64_t)(512 * fatptr->nextval), SEEK_SET);
+		rc = fseek(f, (uint64_t)(info->imageoffset + 512 * fatptr->nextval), SEEK_SET);
 		if (rc < 0) {
 			fprintf(stderr, "get_entry: fseek error, errno %d", errno);
 		}
@@ -504,7 +514,7 @@ int ls(struct info_s *info, struct dot_table_s **dot_table) {
 	clust = (info->pwd - info->rootstart) / info->bootinfo.spc + 1;
 	for (fatptr = build_fat_chain(f, info, clust, 512 * info->bootinfo.spc, 0);
 	    fatptr != NULL; fatptr = fatptr->next) {
-		rc = fseek(f, (uint64_t)(512 * fatptr->nextval), SEEK_SET);
+		rc = fseek(f, (uint64_t)(info->imageoffset + 512 * fatptr->nextval), SEEK_SET);
 		if (rc < 0) {
 			fprintf(stderr, "ls: fseeko error, errno %d", errno);
 		}
@@ -605,7 +615,9 @@ void show_info(struct info_s *info) {
 	    (uint64_t)(info->maxcluster * 512 * info->bootinfo.spc));
 	printf("numclusters  = %u\n", info->numclusters);
 	printf("mediasize    = %llu bytes\n", info->mediasize);
+	printf("partitionsize= %llu bytes\n", info->partitionsize);
 	printf("fatsecs      = %u sectors\n", info->fatsecs);
+	printf("image offset = %u\n", info->imageoffset);
 	printf("image name   = %s\n", info->imagename);
 }
 
@@ -650,7 +662,7 @@ int cat(char *argv, struct info_s *info, struct dot_table_s *dot_table) {
 	buf = calloc(512 * info->bootinfo.spc, sizeof(char));
 	for (fatptr = build_fat_chain(f, info, de.fstart, de.fsize, de.attr);
 	    fatptr != NULL; fatptr = fatptr->next) {
-		rc = fseek(f, (uint64_t)(512 * fatptr->nextval), SEEK_SET);
+		rc = fseek(f, (uint64_t)(info->imageoffset + 512 * fatptr->nextval), SEEK_SET);
 		if (rc < 0) {
 			fprintf(stderr, "cat: fseeko error, errno %d", errno);
 		}
@@ -805,6 +817,7 @@ int dfxml(struct info_s *info, struct dot_table_s *dot_table, int argc, char *ar
 
 */
 	retval = dfxmlify(f, "/", info, &dot_table);
+	if (retval != 0) printf("    <!--Error: dfxml conversion of this partition failed.-->");
 	printf("  </volume>\n");
         fclose(f);
 
@@ -838,7 +851,7 @@ int dfxmlify(FILE *f, char *argv, struct info_s *info, struct dot_table_s **dot_
 	  fatptr = build_fat_chain(f, info, clust, 512 * info->bootinfo.spc, 0);
 	  fatptr != NULL;
 	  fatptr = fatptr->next) {
-		rc = fseek(f, (uint64_t)(512 * fatptr->nextval), SEEK_SET);
+		rc = fseek(f, (uint64_t)(info->imageoffset + 512 * fatptr->nextval), SEEK_SET);
 		if (rc < 0) {
 			fprintf(stderr, "dfxmlify: fseeko error, errno %d", errno);
 		}
@@ -849,7 +862,7 @@ int dfxmlify(FILE *f, char *argv, struct info_s *info, struct dot_table_s **dot_
                "create_date_time    access_date_time    update_date_time "
                "filename\n");*/
 		for (entry = 0; entry < info->bootinfo.spc; entry++) {
-//			rc = fseek(f, dir_off, SEEK_SET); /*Reset file pointer, in case build_fat_chain reads and doesn't clean up state*/
+//			rc = fseek(f, (uint64_t)(info->imageoffset + dir_off), SEEK_SET); /*Reset file pointer, in case build_fat_chain reads and doesn't clean up state*/
 			s = fread(&de, sizeof(struct direntry_s), 1, f);
 			if (s != 1) {
 				fprintf(stderr, "dfxmlify: s = %zu\n", s);
@@ -962,7 +975,7 @@ int dfxmlify(FILE *f, char *argv, struct info_s *info, struct dot_table_s **dot_
                     add_dot_entry(info, dot_table, de.fstart, clust, 1);
                     /*Recurse*/
                     retval = dfxmlify(f, full_path, info, dot_table);
-                    rc = fseek(f, (uint64_t)(512 * fatptr->nextval) + (1+entry)*sizeof(struct direntry_s), SEEK_SET); /*Disk image cursor gets tweaked in every dfxmlify call; reset*/
+                    rc = fseek(f, (uint64_t)(info->imageoffset + 512 * fatptr->nextval) + (1+entry)*sizeof(struct direntry_s), SEEK_SET); /*Disk image cursor gets tweaked in every dfxmlify call; reset*/
 			if (rc < 0) {
 				fprintf(stderr, "dfxmlify: fseek error, errno %d", errno);
 			}
