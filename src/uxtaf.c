@@ -133,7 +133,7 @@ struct info_s {
 	uint32_t firstcluster;
 	uint32_t maxcluster;
 	uint32_t numclusters;
-	uint64_t partitionsize;
+	uint64_t partitionsize; /* Unit: Bytes */
 	uint64_t mediasize; /* TODO Distinguish in code between media size and partition size */
 	uint32_t fatsecs;
 	off_t imageoffset; /* offset within the image file (for a partition within a disk image) */
@@ -325,27 +325,28 @@ int attach(struct info_s *info, struct dot_table_s **dot_table) {
 	}
 
 	switch (info->imageoffset) {
-		/* TODO Populate partition sizes */
+		/* Partition sizes are as in TSK's tsk3/vs/xtaf.c */
 		case 0x0:
 			info->partitionsize = info->mediasize;
 		break;
 		case 0x80000:
-			info->partitionsize = info->mediasize;
+			info->partitionsize = 2147483648;
 		break;
 		case 0x80080000:
-			info->partitionsize = info->mediasize;
+			info->partitionsize = 2348810240;
 		break;
 		case 0x10c080000:
-			info->partitionsize = info->mediasize;
+			info->partitionsize = 216203264;
 		break;
 		case 0x118eb0000:
-			info->partitionsize = info->mediasize;
+			info->partitionsize = 134217728;
 		break;
 		case 0x120eb0000:
-			info->partitionsize = info->mediasize;
+			info->partitionsize = 268435456;
 		break;
 		case 0x130eb0000:
-			info->partitionsize = info->mediasize;
+			/* TODO Populate this according to switch on media size */
+			info->partitionsize = info->mediasize - info->imageoffset;
 		break;
 		default:
 			fprintf(stderr, "Warning: Unknown partition offset; defaulting to remaining media size.  This probably won't end well.\n"); /*TODO Add partition to this*/
