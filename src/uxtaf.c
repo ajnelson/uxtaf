@@ -964,6 +964,12 @@ int dfxmlify(FILE *f, char *argv, struct info_s *info, struct dot_table_s **dot_
                 int sect = (clust-1) * 32 + (entry/8);
                 int inode = 3 + 8 * sect + (entry%8);
                 printf("      <st_ino>%d</st_ino>\n", inode );
+/*
+ * TODO:
+ *      <hashdigest type='md5'></hashdigest>
+ *      <hashdigest type='sha1'></hashdigest>
+ *
+ * */
                 /*printf("%5u %c%c%c%c%c%c %10u\n",
                  entry,
                  (de.attr & 1 ? 'r' : '-'),
