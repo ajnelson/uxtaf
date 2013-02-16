@@ -841,6 +841,7 @@ int dfxmlify(FILE *f, char *argv, struct info_s *info, struct dot_table_s **dot_
 	char full_path[4096]; /*AJN Maybe overkill?*/
 	int concat_retval;
 	int is_dent;
+	int is_alloc;
     
 	uint32_t prevpwd = info->pwd; /*AJN: Note that cd() only mutates info->pwd*/
 	cd(argv, info, *dot_table);
@@ -872,6 +873,9 @@ int dfxmlify(FILE *f, char *argv, struct info_s *info, struct dot_table_s **dot_
 			if (de.fnl == 0 || de.fnl == 0xff)
 				continue; /* to next slot */
             
+			/* Denote deleted entries */
+			is_alloc = (de.fnl == 0xe5) ? 0 : 1;
+
 			de.fstart = bswap32(de.fstart);
 
 			/* Special consideration: directories have their sizes recorded as 0, but Fiwalk records the size of the clusters used (not considering the proportion of the clusters used).  Record here directory size as their fat chain length. This differs from the copy-pasted logic.*/
@@ -890,6 +894,7 @@ int dfxmlify(FILE *f, char *argv, struct info_s *info, struct dot_table_s **dot_
 //			}
 
 			bzero(fname, 43 * sizeof(char));
+			/* Extract name */
 			if (de.fnl == 0xe5 || de.fnl > 42)
 				for (i = 0; i < 42; i++) {
 					fname[i] = de.name[i];
@@ -906,8 +911,10 @@ int dfxmlify(FILE *f, char *argv, struct info_s *info, struct dot_table_s **dot_
             for (i = 0; i < 42; i++)
                 if (!isprint(fname[i]) && fname[i] != 0)
                     is_dent = 0;
-            if (is_dent == 0)
-                continue; /*AJN Of course, the rest of the directory's probably dead at this point.*/
+            if (is_dent == 0) {
+                /* fprintf(stderr, "dfxmlify: Note: Skipping directory entry due to unprintable character: %d\n", entry); */
+                continue; /*AJN Of course, the rest of the directory's probably dead at this point. */
+            }
             printf("    <fileobject>\n");
 			dc = dosdati(bswap16(de.cdate), bswap16(de.ctime));
 			da = dosdati(bswap16(de.adate), bswap16(de.atime));
@@ -920,15 +927,16 @@ int dfxmlify(FILE *f, char *argv, struct info_s *info, struct dot_table_s **dot_
                 retval = concat_retval;
                 fprintf(stderr, "dfxmlify: snprintf: Some kind of error forming the full path.\n");
             } else {
-                printf("      <filename>%s</filename>\n",full_path+1); /*AJN DFXML has a history of not starting paths with '/'*/
-                printf("      <misc name='fnl'>%3u</misc>\n", de.fnl); /*AJN Not sure at the moment what 'fnl' stands for*/
+                printf("      <filename>%s</filename>\n",full_path+1); /*AJN DFXML has a history of not starting paths with '/' */
+                printf("      <xtaf:filenamelength>%u</xtaf:filenamelength>\n", de.fnl);
                 printf("      <filesize>%d</filesize>\n", de.fsize);
+                printf("      <alloc>%d</alloc>\n", is_alloc);
                 printf("      <crtime>%04u-%02u-%02uT%02u:%02u:%02uZ</crtime>\n", dc.year, dc.month, dc.day, dc.hour, dc.minute, dc.second);
                 printf("      <atime>%04u-%02u-%02uT%02u:%02u:%02uZ</atime>\n", da.year, da.month, da.day, da.hour, da.minute, da.second);
                 printf("      <mtime>%04u-%02u-%02uT%02u:%02u:%02uZ</mtime>\n", du.year, du.month, du.day, du.hour, du.minute, du.second);
                 int sect = (clust-1) * 32 + (entry/8);
                 int inode = 3 + 8 * sect + (entry%8);
-                printf("      <st_ino>%d </st_ino>\n", inode );
+                printf("      <st_ino>%d</st_ino>\n", inode );
                 /*printf("%5u %c%c%c%c%c%c %10u\n",
                  entry,
                  (de.attr & 1 ? 'r' : '-'),
@@ -956,7 +964,7 @@ int dfxmlify(FILE *f, char *argv, struct info_s *info, struct dot_table_s **dot_
                             this_csize = de.fsize - fsize_accounted;
                         }
                         printf(" len='%d'", this_csize);
-                        printf(">\n");
+                        printf(" />\n");
                         fsize_accounted += this_csize;
                         brfatptr = brfatptr->next;
                     }
