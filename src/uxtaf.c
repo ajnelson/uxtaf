@@ -759,7 +759,18 @@ int dfxml(struct info_s *info, struct dot_table_s *dot_table, int argc, char *ar
                 info->imagename, errno);
 		return(errno);
 	}
-	printf("  <volume>\n");
+	printf("  <sectorsize>512</sectorsize>\n");
+	printf("  <volume offset=\"%zu\">\n", info->imageoffset);
+	printf("    <partition_offset>%zu</partition_offset>\n", info->imageoffset);
+	printf("    <block_size>%zu</block_size>\n", (info->bootinfo.spc) * 512);
+	printf("    <ftype_str>XTAF</ftype_str>\n"); /* TODO add XTAF16 or XTAF32*/
+/* TODO Add these other volume elements
+    <ftype>256</ftype> (Probably not this one, it's a number only TSK defines)
+    <block_count>235516</block_count> (Is this in sectors or blocks(==clusters)?)
+    <first_block>0</first_block> (Why would this not be 0?)
+    <last_block>235515</last_block>
+
+*/
 	retval = dfxmlify(f, "/", info, &dot_table);
 	printf("  </volume>\n");
         fclose(f);
@@ -946,7 +957,7 @@ int main(int argc, char *argv[]) {
 		info.imagename[i] = '\0';
 		/* Assign offset of the partition within the image file to info struct */
 		if (argc == 4) {
-			info.imageoffset = argv[3];
+			info.imageoffset = atoi(argv[3]);
 		} else {
 			/* Default 0 */
 			info.imageoffset = 0;
