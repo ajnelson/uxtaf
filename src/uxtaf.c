@@ -203,6 +203,7 @@ int read_boot(FILE *f, struct boot_s *b) {
 
 struct fat_s *build_fat_chain(FILE *f, struct info_s *info, uint32_t start,
     uint32_t size, uint8_t dentry_attr) {
+	int rc;
 	struct fat_s *head, *list, *this;
 	size_t s;
 	uint32_t cluster, nc;
@@ -218,7 +219,7 @@ struct fat_s *build_fat_chain(FILE *f, struct info_s *info, uint32_t start,
 	if (size % (512 * info->bootinfo.spc) > 0)
 		nc++;
 	for (;;) {
-		fseeko(f, (uint64_t)(info->fatstart * 512 + cluster *
+		rc = fseeko(f, (uint64_t)(info->fatstart * 512 + cluster *
 		    info->fatmult), SEEK_SET);
 		s = fread(&cluster, info->fatmult, 1, f);
 		if (s != 1) {
@@ -290,6 +291,7 @@ int attach(struct info_s *info, struct dot_table_s **dot_table) {
 	uint8_t quirkblk[4096];
 	size_t s;
 	FILE *f;
+	int rc;
 
 	fprintf(stderr, "Opening %s in 'rb' mode\n", info->imagename);
 	f = fopen(info->imagename, "rb");
@@ -298,12 +300,12 @@ int attach(struct info_s *info, struct dot_table_s **dot_table) {
 		    info->imagename, errno);
 		return(errno);
 	}
-	fseeko(f, 0LL, SEEK_END);
+	rc = fseeko(f, 0LL, SEEK_END);
 	info->mediasize = 0;
 	if (ftello(f) != -1)
 		info->mediasize = ftello(f);
 	if (info->mediasize > 0) {
-		fseeko(f, 0LL, SEEK_SET);
+		rc = fseeko(f, 0LL, SEEK_SET);
 	} else {
 		fprintf(stderr, "attach: fseeko: errno = %i\n", errno);
 		fclose(f);
@@ -343,7 +345,7 @@ int attach(struct info_s *info, struct dot_table_s **dot_table) {
 	    info->rootstart / info->bootinfo.spc,
 	    info->rootstart % info->bootinfo.spc);
 	/* correct for hd quirk */
-	fseeko(f, (uint64_t)info->rootstart * 512, SEEK_SET);
+	rc = fseeko(f, (uint64_t)info->rootstart * 512, SEEK_SET);
 	s = fread(quirkblk, sizeof(uint8_t), 4096, f);
 	if (s != 4096) {
 		fprintf(stderr, "attach: block read error!\n");
@@ -381,6 +383,7 @@ int attach(struct info_s *info, struct dot_table_s **dot_table) {
 struct direntry_s get_entry(struct info_s *info, uint32_t clust, char *filename)
 {
 	FILE *f;
+	int rc;
 	struct direntry_s de;
 	size_t s;
 	struct fat_s *fatptr;
@@ -396,7 +399,7 @@ struct direntry_s get_entry(struct info_s *info, uint32_t clust, char *filename)
 	}
 	for (fatptr = build_fat_chain(f, info, clust, 512 * info->bootinfo.spc, 0);
 	    fatptr != NULL; fatptr = fatptr->next) {
-		fseek(f, (uint64_t)(512 * fatptr->nextval), SEEK_SET);
+		rc = fseek(f, (uint64_t)(512 * fatptr->nextval), SEEK_SET);
 		for (entry = 0; entry < info->bootinfo.spc; entry++) {
 			s = fread(&de, sizeof(struct direntry_s), 1, f);
 			if (s != 1) {
@@ -468,10 +471,11 @@ int ls(struct info_s *info, struct dot_table_s **dot_table) {
 	int i, entry;
 	size_t s;
 	FILE *f;
+	int rc;
 	struct fat_s *fatptr;
 	int freq[256];
 	uint32_t clust;
-    int is_dent;
+	int is_dent;
 
 	for (i = 0; i < 256; i++)
 		freq[i] = 0;
@@ -485,7 +489,7 @@ int ls(struct info_s *info, struct dot_table_s **dot_table) {
 	clust = (info->pwd - info->rootstart) / info->bootinfo.spc + 1;
 	for (fatptr = build_fat_chain(f, info, clust, 512 * info->bootinfo.spc, 0);
 	    fatptr != NULL; fatptr = fatptr->next) {
-		fseek(f, (uint64_t)(512 * fatptr->nextval), SEEK_SET);
+		rc = fseek(f, (uint64_t)(512 * fatptr->nextval), SEEK_SET);
 
 		printf("entry fnl rhsvda startclust   filesize    "
 		    "create_date_time    access_date_time    update_date_time "
@@ -606,6 +610,7 @@ void cd(char *argv, struct info_s *info, struct dot_table_s *dot_table) {
 int cat(char *argv, struct info_s *info, struct dot_table_s *dot_table) {
 	size_t s;
 	FILE *f;
+	int rc;
 	struct fat_s *fatptr;
 	char *buf;
 	struct direntry_s de;
@@ -627,7 +632,7 @@ int cat(char *argv, struct info_s *info, struct dot_table_s *dot_table) {
 	buf = calloc(512 * info->bootinfo.spc, sizeof(char));
 	for (fatptr = build_fat_chain(f, info, de.fstart, de.fsize, de.attr);
 	    fatptr != NULL; fatptr = fatptr->next) {
-		fseek(f, (uint64_t)(512 * fatptr->nextval), SEEK_SET);
+		rc = fseek(f, (uint64_t)(512 * fatptr->nextval), SEEK_SET);
 
 		s = fread(buf, sizeof(char), 512 * info->bootinfo.spc, f);
 		if (s != 512 * info->bootinfo.spc) {
@@ -763,7 +768,14 @@ int dfxml(struct info_s *info, struct dot_table_s *dot_table, int argc, char *ar
 	printf("  <volume offset=\"%zu\">\n", info->imageoffset);
 	printf("    <partition_offset>%zu</partition_offset>\n", info->imageoffset);
 	printf("    <block_size>%zu</block_size>\n", (info->bootinfo.spc) * 512);
-	printf("    <ftype_str>XTAF</ftype_str>\n"); /* TODO add XTAF16 or XTAF32*/
+	if (info->fatmask == FAT32_MASK) {
+		printf("    <ftype_str>XTAF32</ftype_str>\n");
+	} else if (info->fatmask == FAT16_MASK) {
+		printf("    <ftype_str>XTAF16</ftype_str>\n");
+	} else {
+		printf("    <!--Warning: Unknown if this is XTAF16, 32, or something new.-->\n");
+		printf("    <ftype_str>XTAF</ftype_str>\n");
+	}
 /* TODO Add these other volume elements
     <ftype>256</ftype> (Probably not this one, it's a number only TSK defines)
     <block_count>235516</block_count> (Is this in sectors or blocks(==clusters)?)
@@ -781,6 +793,7 @@ int dfxml(struct info_s *info, struct dot_table_s *dot_table, int argc, char *ar
 
 /* Convert an entire partition to DFXML */
 int dfxmlify(FILE *f, char *argv, struct info_s *info, struct dot_table_s **dot_table) {
+	int rc;
 	int retval = 0;
 	struct direntry_s de;
 	char fname[43];
@@ -804,7 +817,7 @@ int dfxmlify(FILE *f, char *argv, struct info_s *info, struct dot_table_s **dot_
 	  fatptr = build_fat_chain(f, info, clust, 512 * info->bootinfo.spc, 0);
 	  fatptr != NULL;
 	  fatptr = fatptr->next) {
-		fseek(f, (uint64_t)(512 * fatptr->nextval), SEEK_SET);
+		rc = fseek(f, (uint64_t)(512 * fatptr->nextval), SEEK_SET);
 		dir_off = ftello(f);
 		if (dir_off == -1); //TODO Handle ftello failing.
         
@@ -812,7 +825,7 @@ int dfxmlify(FILE *f, char *argv, struct info_s *info, struct dot_table_s **dot_
                "create_date_time    access_date_time    update_date_time "
                "filename\n");*/
 		for (entry = 0; entry < info->bootinfo.spc; entry++) {
-//			fseek(f, dir_off, SEEK_SET); /*Reset file pointer, in case build_fat_chain reads and doesn't clean up state*/
+//			rc = fseek(f, dir_off, SEEK_SET); /*Reset file pointer, in case build_fat_chain reads and doesn't clean up state*/
 			s = fread(&de, sizeof(struct direntry_s), 1, f);
 			if (s != 1) {
 				fprintf(stderr, "dfxmlify: s = %zu\n", s);
@@ -925,7 +938,7 @@ int dfxmlify(FILE *f, char *argv, struct info_s *info, struct dot_table_s **dot_
                     add_dot_entry(info, dot_table, de.fstart, clust, 1);
                     /*Recurse*/
                     retval = dfxmlify(f, full_path, info, dot_table);
-                    fseek(f, (uint64_t)(512 * fatptr->nextval) + (1+entry)*sizeof(struct direntry_s), SEEK_SET); /*Disk image cursor gets tweaked in every dfxmlify call; reset*/
+                    rc = fseek(f, (uint64_t)(512 * fatptr->nextval) + (1+entry)*sizeof(struct direntry_s), SEEK_SET); /*Disk image cursor gets tweaked in every dfxmlify call; reset*/
                     if (retval)
                         break;
                 }
