@@ -136,7 +136,7 @@ struct info_s {
 	uint64_t partitionsize; /* Unit: Bytes */
 	uint64_t mediasize; /* TODO Distinguish in code between media size and partition size */
 	uint32_t fatsecs;
-	off_t imageoffset; /* offset within the image file (for a partition within a disk image) */
+	uint64_t imageoffset; /* offset within the image file (for a partition within a disk image) */
 	char imagename[256]; /* max file name length */
 };
 
@@ -324,34 +324,31 @@ int attach(struct info_s *info, struct dot_table_s **dot_table) {
 		return(errno);
 	}
 
-	switch (info->imageoffset) {
-		/* Partition sizes are as in TSK's tsk3/vs/xtaf.c */
-		case 0x0:
-			info->partitionsize = info->mediasize;
-		break;
-		case 0x80000:
-			info->partitionsize = 2147483648;
-		break;
-		case 0x80080000:
-			info->partitionsize = 2348810240;
-		break;
-		case 0x10c080000:
-			info->partitionsize = 216203264;
-		break;
-		case 0x118eb0000:
-			info->partitionsize = 134217728;
-		break;
-		case 0x120eb0000:
-			info->partitionsize = 268435456;
-		break;
-		case 0x130eb0000:
-			/* TODO Populate this according to switch on media size */
-			info->partitionsize = info->mediasize - info->imageoffset;
-		break;
-		default:
-			fprintf(stderr, "Warning: Unknown partition offset; defaulting to remaining media size.  This probably won't end well.\n"); /*TODO Add partition to this*/
-			info->partitionsize = info->mediasize - info->imageoffset;
-		break;
+	/* Partition sizes are as in TSK's tsk3/vs/xtaf.c */
+	/* While a switch might look better here, some of the offsets are bigger than a 4-byte int can store, which even caused a problem on a 64-bit CPU for some reason. */
+	if (info->imageoffset == 0x0) {
+		info->partitionsize = info->mediasize;
+	} else if (info->imageoffset == 0x80000) {
+		info->partitionsize = 2147483648;
+	} else if (info->imageoffset == 0x80080000) {
+		info->partitionsize = 2348810240;
+	} else if (info->imageoffset == 0x10c080000) {
+		info->partitionsize = 216203264;
+	} else if (info->imageoffset == 0x118eb0000) {
+		info->partitionsize = 134217728;
+	} else if (info->imageoffset == 0x120eb0000) {
+		info->partitionsize = 268435456;
+	} else if (info->imageoffset == 0x130eb0000) {
+		/* TODO Populate this according to switch on media size */
+		info->partitionsize = info->mediasize - info->imageoffset;
+	} else {
+		fprintf(stderr, "Warning: Unknown partition offset; defaulting to remaining media size.  This probably won't end well.\n"); /*TODO Add partition to this*/
+		info->partitionsize = info->mediasize - info->imageoffset;
+	}
+
+	rc = fseeko(f, info->imageoffset, SEEK_SET);
+	if (rc < 0) {
+		fprintf(stderr, "attach: fseeko (partition initializing) error, errno %d", errno);
 	}
 
 	if (read_boot(f, &info->bootinfo)) {
@@ -937,7 +934,7 @@ int dfxmlify(FILE *f, char *argv, struct info_s *info, struct dot_table_s **dot_
                 if (!isprint(fname[i]) && fname[i] != 0)
                     is_dent = 0;
             if (is_dent == 0) {
-                /* fprintf(stderr, "dfxmlify: Note: Skipping directory entry due to unprintable character: %d\n", entry); */
+                fprintf(stderr, "dfxmlify: Note: Skipping directory entry due to unprintable character: %d\n", entry);
                 continue; /*AJN Of course, the rest of the directory's probably dead at this point. */
             }
             printf("    <fileobject>\n");
@@ -945,7 +942,7 @@ int dfxmlify(FILE *f, char *argv, struct info_s *info, struct dot_table_s **dot_
 			da = dosdati(bswap16(de.adate), bswap16(de.atime));
 			du = dosdati(bswap16(de.udate), bswap16(de.utime));
             is_dir = de.attr & 16;
-            *name_type = '?';
+            *name_type = 0;
             if (is_dir) *name_type = 'd';
             if (de.attr & 1) *name_type = 'r';
             /*Define full path*/
@@ -958,7 +955,7 @@ int dfxmlify(FILE *f, char *argv, struct info_s *info, struct dot_table_s **dot_
 		/*TODO guarantee that len(full_path) >= 1*/
                 printf("      <filename>%s</filename>\n",full_path+1); /*AJN DFXML has a history of not starting paths with '/' */
                 printf("      <xtaf:filenamelength>%u</xtaf:filenamelength>\n", de.fnl);
-                printf("      <name_type>%s</name_type>\n", name_type);
+                if (*name_type) printf("      <name_type>%s</name_type>\n", name_type);
                 printf("      <filesize>%d</filesize>\n", de.fsize);
                 printf("      <alloc>%d</alloc>\n", is_alloc);
                 printf("      <crtime>%04u-%02u-%02uT%02u:%02u:%02uZ</crtime>\n", dc.year, dc.month, dc.day, dc.hour, dc.minute, dc.second);
@@ -1048,7 +1045,7 @@ int main(int argc, char *argv[]) {
 		info.imagename[i] = '\0';
 		/* Assign offset of the partition within the image file to info struct */
 		if (argc == 4) {
-			info.imageoffset = atoi(argv[3]);
+			info.imageoffset = atoll(argv[3]);
 		} else {
 			/* Default 0 */
 			info.imageoffset = 0;
