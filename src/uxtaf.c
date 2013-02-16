@@ -864,6 +864,8 @@ int dfxmlify(FILE *f, char *argv, struct info_s *info, struct dot_table_s **dot_
 	int concat_retval;
 	int is_dent;
 	int is_alloc;
+	char name_type[2];
+	*(name_type+1) = 0; /* Null-terminate string */
     
 	uint32_t prevpwd = info->pwd; /*AJN: Note that cd() only mutates info->pwd*/
 	cd(argv, info, *dot_table);
@@ -942,6 +944,9 @@ int dfxmlify(FILE *f, char *argv, struct info_s *info, struct dot_table_s **dot_
 			da = dosdati(bswap16(de.adate), bswap16(de.atime));
 			du = dosdati(bswap16(de.udate), bswap16(de.utime));
             is_dir = de.attr & 16;
+            *name_type = '?';
+            if (is_dir) *name_type = 'd';
+            if (de.attr & 1) *name_type = 'r';
             /*Define full path*/
             bzero(full_path, 4096 * sizeof(char));
             concat_retval = snprintf(full_path, 4096, "%s%s%s", argv, strcmp(argv,"/") ? "/" : "", fname);
@@ -949,8 +954,10 @@ int dfxmlify(FILE *f, char *argv, struct info_s *info, struct dot_table_s **dot_
                 retval = concat_retval;
                 fprintf(stderr, "dfxmlify: snprintf: Some kind of error forming the full path.\n");
             } else {
+		/*TODO guarantee that len(full_path) >= 1*/
                 printf("      <filename>%s</filename>\n",full_path+1); /*AJN DFXML has a history of not starting paths with '/' */
                 printf("      <xtaf:filenamelength>%u</xtaf:filenamelength>\n", de.fnl);
+                printf("      <name_type>%s</name_type>\n", name_type);
                 printf("      <filesize>%d</filesize>\n", de.fsize);
                 printf("      <alloc>%d</alloc>\n", is_alloc);
                 printf("      <crtime>%04u-%02u-%02uT%02u:%02u:%02uZ</crtime>\n", dc.year, dc.month, dc.day, dc.hour, dc.minute, dc.second);
