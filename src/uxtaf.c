@@ -386,7 +386,7 @@ int attach(struct info_s *info, struct dot_table_s **dot_table) {
 	/* correct for hd quirk */
 	rc = fseeko(f, (uint64_t)info->imageoffset + info->rootstart * 512, SEEK_SET);
 	if (rc < 0) {
-		fprintf(stderr, "attach: fseeko (third call) error, errno %d", errno);
+		fprintf(stderr, "attach: fseeko (quirk block call) error, errno %d", errno);
 	}
 	s = fread(quirkblk, sizeof(uint8_t), 4096, f);
 	if (s != 4096) {
@@ -653,8 +653,8 @@ void cd(char *argv, struct info_s *info, struct dot_table_s *dot_table) {
 		info->pwd = (de.fstart - 1) * info->bootinfo.spc +
 		    info->rootstart;
 
-	fprintf(stderr, "cd: Debug: new pwd = %u sectors @ 0x%llx bytes\n", info->pwd,
-	    (uint64_t)(info->pwd * 512));
+	fprintf(stderr, "cd: Debug: new pwd = %u sectors @ 0x%llx bytes into partition at %llu bytes of media\n", info->pwd,
+	    (uint64_t)(info->pwd * 512), info->imageoffset);
 }
 
 int cat(char *argv, struct info_s *info, struct dot_table_s *dot_table) {
@@ -855,6 +855,7 @@ int dfxmlify(FILE *f, char *argv, struct info_s *info, struct dot_table_s **dot_
 	int i, entry;
 	size_t s;
 	off_t dir_off;
+	off_t dent_off;
 	struct fat_s *fatptr, *sizefatptr;
 	uint32_t clust;
 	int is_dir;
@@ -864,12 +865,13 @@ int dfxmlify(FILE *f, char *argv, struct info_s *info, struct dot_table_s **dot_
 	int is_alloc;
 	char name_type[2];
 	*(name_type+1) = 0; /* Null-terminate string */
-    
+
 	uint32_t prevpwd = info->pwd; /*AJN: Note that cd() only mutates info->pwd*/
 	cd(argv, info, *dot_table);
 	/*BEGIN COPY*/
-    
+
 	clust = (info->pwd - info->rootstart) / info->bootinfo.spc + 1;
+	/* Loop over clusters of the directory */
 	for (
 	  fatptr = build_fat_chain(f, info, clust, 512 * info->bootinfo.spc, 0);
 	  fatptr != NULL;
@@ -879,22 +881,28 @@ int dfxmlify(FILE *f, char *argv, struct info_s *info, struct dot_table_s **dot_
 			fprintf(stderr, "dfxmlify: fseeko error, errno %d", errno);
 		}
 		dir_off = ftello(f);
+		fprintf(stderr, "dfxmlify: Debug: Changed directory, cursor offset %llu bytes, path %s\n", dir_off, argv);
 		if (dir_off == -1); //TODO Handle ftello failing.
-        
+
 		/*printf("entry fnl rhsvda startclust   filesize    "
-               "create_date_time    access_date_time    update_date_time "
-               "filename\n");*/
+		"create_date_time    access_date_time    update_date_time "
+		"filename\n");*/
+		/* Loop over entries in the directory */
+		/* AJN TODO Is this loop condition actually right? Why SPC, instead of dents per cluster? */
 		for (entry = 0; entry < info->bootinfo.spc; entry++) {
 //			rc = fseek(f, (uint64_t)(info->imageoffset + dir_off), SEEK_SET); /*Reset file pointer, in case build_fat_chain reads and doesn't clean up state*/
+			dent_off = ftello(f);
 			s = fread(&de, sizeof(struct direntry_s), 1, f);
 			if (s != 1) {
 				fprintf(stderr, "dfxmlify: s = %zu\n", s);
 				return(1);
 			}
-            
-			if (de.fnl == 0 || de.fnl == 0xff)
+
+			if (de.fnl == 0 || de.fnl == 0xff) {
+				fprintf(stderr, "dfxmlify: Note: Skipping directory entry (index %d, image offset %llu) due to fnl %u\n", entry, dent_off, de.fnl);
 				continue; /* to next slot */
-            
+			}
+
 			/* Denote deleted entries */
 			is_alloc = (de.fnl == 0xe5) ? 0 : 1;
 
@@ -928,102 +936,108 @@ int dfxmlify(FILE *f, char *argv, struct info_s *info, struct dot_table_s **dot_
 				}
 			else
 				strncpy(fname, de.name, (de.fnl < 42 ? de.fnl : 42));
-            /*AJN Check name for unprintable characters. That's a good indication that this isn't supposed to be a directory entry.*/
-            is_dent = 1;
-            for (i = 0; i < 42; i++)
-                if (!isprint(fname[i]) && fname[i] != 0)
-                    is_dent = 0;
-            if (is_dent == 0) {
-                fprintf(stderr, "dfxmlify: Note: Skipping directory entry due to unprintable character: %d\n", entry);
-                continue; /*AJN Of course, the rest of the directory's probably dead at this point. */
-            }
-            printf("    <fileobject>\n");
+			/*AJN Check name for unprintable characters. That's a good indication that this isn't supposed to be a directory entry.*/
+			is_dent = 1;
+			for (i = 0; i < 42; i++)
+				if (!isprint(fname[i]) && fname[i] != 0)
+					is_dent = 0;
+			if (is_dent == 0) {
+				fprintf(stderr, "dfxmlify: Note: Skipping directory entry (index %d) due to unprintable character\n", entry);
+				continue; /*AJN Of course, the rest of the directory's probably dead at this point. */
+			}
+
+			printf("    <fileobject>\n");
+
 			dc = dosdati(bswap16(de.cdate), bswap16(de.ctime));
 			da = dosdati(bswap16(de.adate), bswap16(de.atime));
 			du = dosdati(bswap16(de.udate), bswap16(de.utime));
-            is_dir = de.attr & 16;
-            *name_type = 0;
-            if (is_dir) *name_type = 'd';
-            if (de.attr & 1) *name_type = 'r';
-            /*Define full path*/
-            bzero(full_path, 4096 * sizeof(char));
-            concat_retval = snprintf(full_path, 4096, "%s%s%s", argv, strcmp(argv,"/") ? "/" : "", fname);
-            if (concat_retval < 0) {
-                retval = concat_retval;
-                fprintf(stderr, "dfxmlify: snprintf: Some kind of error forming the full path.\n");
-            } else {
-		/*TODO guarantee that len(full_path) >= 1*/
-                printf("      <filename>%s</filename>\n",full_path+1); /*AJN DFXML has a history of not starting paths with '/' */
-                printf("      <xtaf:filenamelength>%u</xtaf:filenamelength>\n", de.fnl);
-                if (*name_type) printf("      <name_type>%s</name_type>\n", name_type);
-                printf("      <filesize>%d</filesize>\n", de.fsize);
-                printf("      <alloc>%d</alloc>\n", is_alloc);
-                printf("      <crtime>%04u-%02u-%02uT%02u:%02u:%02uZ</crtime>\n", dc.year, dc.month, dc.day, dc.hour, dc.minute, dc.second);
-                printf("      <atime>%04u-%02u-%02uT%02u:%02u:%02uZ</atime>\n", da.year, da.month, da.day, da.hour, da.minute, da.second);
-                printf("      <mtime>%04u-%02u-%02uT%02u:%02u:%02uZ</mtime>\n", du.year, du.month, du.day, du.hour, du.minute, du.second);
-                int sect = (clust-1) * 32 + (entry/8);
-                int inode = 3 + 8 * sect + (entry%8);
-                printf("      <st_ino>%d</st_ino>\n", inode );
-/*
- * TODO:
- *      <hashdigest type='md5'></hashdigest>
- *      <hashdigest type='sha1'></hashdigest>
- *
- * */
-                /*printf("%5u %c%c%c%c%c%c %10u\n",
-                 entry,
-                 (de.attr & 1 ? 'r' : '-'),
-                 (de.attr & 2 ? 'h' : '-'),
-                 (de.attr & 4 ? 's' : '-'),
-                 (de.attr & 8 ? 'v' : '-'),
-                 (de.attr & 16 ? 'd' : '-'),
-                 (de.attr & 32 ? 'a' : '-'),
-                 de.fstart);*/
-                
-                /* Build byte runs if possible */
-                struct fat_s *brfatptr = build_fat_chain(f, info, de.fstart, de.fsize, de.attr);
-                if (fatptr != NULL) {
-                    printf("      <byte_runs>\n");
-                    /* fsize_accounted: number of bytes accounted for following fat chain.  If this ends up unequal to de.fsize, there is a data anomaly. */
-                    uint32_t fsize_accounted = 0;
-                    uint32_t full_csize = 512 * info->bootinfo.spc;
-                    uint32_t this_csize = full_csize;
-                    while (brfatptr != NULL) {
-                        printf("        <byte_run");
-                        printf(" file_offset='%d'", fsize_accounted);
-                        //TODO printf(" fs_offset=''");
-                        //TODO printf(" img_offset=''");
-                        if (fsize_accounted + full_csize > de.fsize) {
-                            this_csize = de.fsize - fsize_accounted;
-                        }
-                        printf(" len='%d'", this_csize);
-                        printf(" />\n");
-                        fsize_accounted += this_csize;
-                        brfatptr = brfatptr->next;
-                    }
-                    /* Squawk if there's a byte discrepancy, to stderr and to the XML */
-                    if (fsize_accounted != de.fsize) {
-                        printf("        <!-- Warning: Fat chain terminated before all bytes in the file were accounted for.  (%d bytes remaining.) -->\n", de.fsize - fsize_accounted);
-                        fprintf(stderr, "Warning: Fat chain terminated before all bytes in the file were accounted for.  (%d bytes remaining.)\n", de.fsize - fsize_accounted);
-                    }
-                    printf("      </byte_runs>\n");
-                }
 
-                printf("    </fileobject>\n");
-                fflush(stdout);
-                
-                if (de.fnl != 0xe5 && (de.attr & 16)) {
-                    add_dot_entry(info, dot_table, de.fstart, clust, 1);
-                    /*Recurse*/
-                    retval = dfxmlify(f, full_path, info, dot_table);
-                    rc = fseek(f, (uint64_t)(info->imageoffset + 512 * fatptr->nextval) + (1+entry)*sizeof(struct direntry_s), SEEK_SET); /*Disk image cursor gets tweaked in every dfxmlify call; reset*/
-			if (rc < 0) {
-				fprintf(stderr, "dfxmlify: fseek error, errno %d", errno);
+			is_dir = de.attr & 16;
+			*name_type = 0;
+			if (is_dir) *name_type = 'd';
+			if (de.attr & 1) *name_type = 'r';
+
+			/*Define full path*/
+			bzero(full_path, 4096 * sizeof(char));
+			concat_retval = snprintf(full_path, 4096, "%s%s%s", argv, strcmp(argv,"/") ? "/" : "", fname);
+			if (concat_retval < 0) {
+				retval = concat_retval;
+				fprintf(stderr, "dfxmlify: snprintf: Some kind of error forming the full path.\n");
+			} else {
+				/*TODO guarantee that len(full_path) >= 1*/
+				printf("      <filename>%s</filename>\n",full_path+1); /*AJN DFXML has a history of not starting paths with '/' */
+				printf("      <xtaf:filenamelength>%u</xtaf:filenamelength>\n", de.fnl);
+				if (*name_type) printf("      <name_type>%s</name_type>\n", name_type);
+				printf("      <filesize>%d</filesize>\n", de.fsize);
+				printf("      <alloc>%d</alloc>\n", is_alloc);
+				printf("      <crtime>%04u-%02u-%02uT%02u:%02u:%02uZ</crtime>\n", dc.year, dc.month, dc.day, dc.hour, dc.minute, dc.second);
+				printf("      <atime>%04u-%02u-%02uT%02u:%02u:%02uZ</atime>\n", da.year, da.month, da.day, da.hour, da.minute, da.second);
+				printf("      <mtime>%04u-%02u-%02uT%02u:%02u:%02uZ</mtime>\n", du.year, du.month, du.day, du.hour, du.minute, du.second);
+				int sect = (clust-1) * 32 + (entry/8); /* TODO Relate these hard-coded values to info-> values */
+				int inode = 3 + 8 * sect + (entry%8);
+				printf("      <st_ino>%d</st_ino>\n", inode );
+				/*
+				 * TODO:
+				 *      <hashdigest type='md5'></hashdigest>
+				 *      <hashdigest type='sha1'></hashdigest>
+				 *
+				 * */
+				/*printf("%5u %c%c%c%c%c%c %10u\n",
+				entry,
+				(de.attr & 1 ? 'r' : '-'),
+				(de.attr & 2 ? 'h' : '-'),
+				(de.attr & 4 ? 's' : '-'),
+				(de.attr & 8 ? 'v' : '-'),
+				(de.attr & 16 ? 'd' : '-'),
+				(de.attr & 32 ? 'a' : '-'),
+				de.fstart);*/
+
+				/* Build byte runs if possible */
+				struct fat_s *brfatptr = build_fat_chain(f, info, de.fstart, de.fsize, de.attr);
+				if (fatptr != NULL) {
+					printf("      <byte_runs>\n");
+					/* fsize_accounted: number of bytes accounted for following fat chain.  If this ends up unequal to de.fsize, there is a data anomaly. */
+					uint32_t fsize_accounted = 0;
+					uint32_t full_csize = 512 * info->bootinfo.spc;
+					uint32_t this_csize = full_csize;
+					while (brfatptr != NULL) {
+						printf("        <byte_run");
+						printf(" file_offset='%d'", fsize_accounted);
+						//TODO printf(" fs_offset=''");
+						//TODO printf(" img_offset=''");
+						if (fsize_accounted + full_csize > de.fsize) {
+							this_csize = de.fsize - fsize_accounted;
+						}
+						printf(" len='%d'", this_csize);
+						printf(" />\n");
+						fsize_accounted += this_csize;
+						brfatptr = brfatptr->next;
+					}
+					/* Squawk if there's a byte discrepancy, to stderr and to the XML */
+					if (fsize_accounted != de.fsize) {
+						printf("        <!-- Warning: Fat chain terminated before all bytes in the file were accounted for.  (%d bytes remaining.) -->\n", de.fsize - fsize_accounted);
+						fprintf(stderr, "Warning: Fat chain terminated before all bytes in the file were accounted for.  (%d bytes remaining.)\n", de.fsize - fsize_accounted);
+					}
+					printf("      </byte_runs>\n");
+				}
+
+				printf("    </fileobject>\n");
+				fflush(stdout);
+
+				if (de.fnl != 0xe5 && (de.attr & 16)) {
+					add_dot_entry(info, dot_table, de.fstart, clust, 1);
+					/*Recurse*/
+					retval = dfxmlify(f, full_path, info, dot_table);
+					rc = fseek(f, (uint64_t)(info->imageoffset + 512 * fatptr->nextval) + (1+entry)*sizeof(struct direntry_s), SEEK_SET); /*Disk image cursor gets tweaked in every dfxmlify call; reset*/
+					if (rc < 0) {
+						fprintf(stderr, "dfxmlify: fseek error, errno %d\n", errno);
+					}
+					if (retval) {
+						fprintf(stderr, "dfxmlify: Error in recursive call, retval=%d; terminating.\n", retval);
+						break;
+					}
+				}
 			}
-                    if (retval)
-                        break;
-                }
-            }
 		}
 	}
 	/*END COPY*/
