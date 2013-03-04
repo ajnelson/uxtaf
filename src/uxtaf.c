@@ -860,7 +860,7 @@ int dfxmlify(FILE *f, char *argv, struct info_s *info, struct dot_table_s **dot_
 	size_t s;
 	off_t dir_off;
 	off_t dent_off;
-	struct fat_s *fatptr, *sizefatptr;
+	struct fat_s *fatptr, *rootfatptr, *sizefatptr;
 	uint32_t clust;
 	int is_dir;
 	char full_path[4096]; /*AJN Maybe overkill?*/
@@ -882,6 +882,28 @@ int dfxmlify(FILE *f, char *argv, struct info_s *info, struct dot_table_s **dot_
 	printf("    <!-- Starting clust: %d -->\n", clust);
 
 	fatptr = build_fat_chain(f, info, clust, 512 * info->bootinfo.spc, 0);
+
+	/* Special case: Create a fileobject for the root directory, which has no other references */
+	if (!strncmp(argv, "/", 42)) {
+		printf("    <fileobject>\n");
+		printf("      <filename></filename><!--Root directory-->\n");
+		printf("      <byte_runs>\n");
+		this_cluster = clust;
+		for (
+		  rootfatptr = fatptr;
+		  rootfatptr != NULL;
+		  rootfatptr = rootfatptr->next) {
+			printf("        <byte_run");
+			printf(" fs_offset='%d'", 512 * rootfatptr->nextval);
+			printf(" img_offset='%d'", info->imageoffset + 512 * rootfatptr->nextval);
+			if (rootfatptr == fatptr)
+				printf(" xtaf:fs_sector='%llu'", info->pwd);
+			printf(" />\n");
+			this_cluster = rootfatptr->nextval;
+		}
+		printf("      </byte_runs>\n");
+		printf("    </fileobject>\n");
+	}
 
 	/*BEGIN COPY*/
 
