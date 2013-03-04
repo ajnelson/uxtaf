@@ -228,10 +228,10 @@ struct fat_s *build_fat_chain(FILE *f, struct info_s *info, uint32_t start,
 		s = fread(&cluster, info->fatmult, 1, f);
 		if (s != 1) {
 			fprintf(stderr, "build_fat_chain: s = %zu\n", s);
-			fprintf(stderr, "build_fat_chain: (start = %zu)\n", start);
-			fprintf(stderr, "build_fat_chain: (size = %zu)\n", size);
-			fprintf(stderr, "build_fat_chain: (nc = %zu)\n", nc);
-			fprintf(stderr, "build_fat_chain: (cluster = %zu)\n", cluster);
+			fprintf(stderr, "build_fat_chain: (start = %u)\n", start);
+			fprintf(stderr, "build_fat_chain: (size = %u)\n", size);
+			fprintf(stderr, "build_fat_chain: (nc = %u)\n", nc);
+			fprintf(stderr, "build_fat_chain: (cluster = %u)\n", cluster);
 			return(NULL);
 		}
                 //Debug fprintf(stderr, "build_fat_chain: Debug: clust = %d\n", (int) cluster);
@@ -287,7 +287,7 @@ void add_dot_entry(struct info_s *info, struct dot_table_s **dot_table, uint32_t
 			newdot->next = *dot_table;
 			*dot_table = newdot;
 		} else {
-			fprintf(stderr, "add_dot_entry: Warning: Skipped adding a dot entry for out-of-bounds cluster %zu", cluster);
+			fprintf(stderr, "add_dot_entry: Warning: Skipped adding a dot entry for out-of-bounds cluster %u", cluster);
 		}
 	}
 }
@@ -637,7 +637,7 @@ void show_info(struct info_s *info) {
 	printf("mediasize    = %llu bytes\n", info->mediasize);
 	printf("partitionsize= %llu bytes\n", info->partitionsize);
 	printf("fatsecs      = %u sectors\n", info->fatsecs);
-	printf("image offset = %u\n", info->imageoffset);
+	printf("image offset = %llu\n", info->imageoffset);
 	printf("image name   = %s\n", info->imagename);
 }
 
@@ -822,9 +822,9 @@ int dfxml(struct info_s *info, struct dot_table_s *dot_table, int argc, char *ar
 		return(errno);
 	}
 	printf("  <sectorsize>512</sectorsize>\n");
-	printf("  <volume offset=\"%zu\">\n", info->imageoffset);
-	printf("    <partition_offset>%zu</partition_offset>\n", info->imageoffset);
-	printf("    <block_size>%zu</block_size>\n", (info->bootinfo.spc) * 512);
+	printf("  <volume offset=\"%llu\">\n", info->imageoffset);
+	printf("    <partition_offset>%llu</partition_offset>\n", info->imageoffset);
+	printf("    <block_size>%u</block_size>\n", (info->bootinfo.spc) * 512);
 	if (info->fatmask == FAT32_MASK) {
 		printf("    <ftype_str>XTAF32</ftype_str>\n");
 	} else if (info->fatmask == FAT16_MASK) {
@@ -894,10 +894,10 @@ int dfxmlify(FILE *f, char *argv, struct info_s *info, struct dot_table_s **dot_
 		  rootfatptr != NULL;
 		  rootfatptr = rootfatptr->next) {
 			printf("        <byte_run");
-			printf(" fs_offset='%d'", 512 * rootfatptr->nextval);
-			printf(" img_offset='%d'", info->imageoffset + 512 * rootfatptr->nextval);
+			printf(" fs_offset='%u'", 512 * rootfatptr->nextval);
+			printf(" img_offset='%llu'", info->imageoffset + 512 * rootfatptr->nextval);
 			if (rootfatptr == fatptr)
-				printf(" xtaf:fs_sector='%llu'", info->pwd);
+				printf(" xtaf:fs_sector='%u'", info->pwd);
 			printf(" />\n");
 			this_cluster = rootfatptr->nextval;
 		}
@@ -1041,8 +1041,8 @@ int dfxmlify(FILE *f, char *argv, struct info_s *info, struct dot_table_s **dot_
 						printf("        <byte_run");
 						//printf(" xtaf:this_cluster='%d'", this_cluster);
 						//printf(" xtaf:next_cluster='%d'", brfatptr->nextval);
-						printf(" file_offset='%zu'", fsize_accounted);
-						printf(" fs_offset='%llu'", 512 * brfatptr->nextval);
+						printf(" file_offset='%u'", fsize_accounted);
+						printf(" fs_offset='%u'", 512 * brfatptr->nextval);
 						printf(" img_offset='%llu'", info->imageoffset + 512 * brfatptr->nextval);
 						if (fsize_accounted + full_csize > de.fsize) {
 							this_csize = de.fsize - fsize_accounted;
