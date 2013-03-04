@@ -536,7 +536,7 @@ int ls(struct info_s *info, struct dot_table_s **dot_table) {
 	    fatptr != NULL; fatptr = fatptr->next) {
 		rc = fseek(f, (uint64_t)(info->imageoffset + 512 * fatptr->nextval), SEEK_SET);
 		if (rc < 0) {
-			fprintf(stderr, "ls: fseeko error, errno %d", errno);
+			fprintf(stderr, "ls: fseek error, errno %d", errno);
 		}
 
 		printf("entry fnl rhsvda startclust   filesize    "
