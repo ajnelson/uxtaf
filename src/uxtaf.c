@@ -141,7 +141,7 @@ struct info_s {
 };
 
 struct fat_s { /* 32 bits indeed... */
-	uint32_t nextval;
+	uint32_t nextval; /* The sector, counting from the beginning of the partition, of the current point in the FAT chain (NOT the next-cluster recorded directly within the FAT region). */
 	struct fat_s *next;
 };
 
