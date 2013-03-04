@@ -872,6 +872,7 @@ int dfxmlify(FILE *f, char *argv, struct info_s *info, struct dot_table_s **dot_
 	/*BEGIN COPY*/
 
 	clust = (info->pwd - info->rootstart) / info->bootinfo.spc + 1;
+	printf("    <!-- Starting clust: %d -->\n", clust);
 	/* Loop over clusters of the directory */
 	for (
 	  fatptr = build_fat_chain(f, info, clust, 512 * info->bootinfo.spc, 0);
