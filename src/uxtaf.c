@@ -645,6 +645,7 @@ int cd(char *argv, struct info_s *info, struct dot_table_s *dot_table) {
 	struct direntry_s de;
 	int retval = 0;
 
+	fprintf(stderr, "cd: Debug: argv = %s\n", argv);
 	de = resolve_path(info, dot_table, argv);
 	if (de.fnl == 0) {
 		fprintf(stderr, "cd: pathname not found: %s\n", argv);
