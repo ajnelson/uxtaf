@@ -863,6 +863,7 @@ int dfxmlify(FILE *f, char *argv, struct info_s *info, struct dot_table_s **dot_
 	int concat_retval;
 	int is_dent;
 	int is_alloc;
+	uint32_t this_cluster;
 	char name_type[2];
 	*(name_type+1) = 0; /* Null-terminate string */
 
@@ -1000,8 +1001,11 @@ int dfxmlify(FILE *f, char *argv, struct info_s *info, struct dot_table_s **dot_
 					uint32_t fsize_accounted = 0;
 					uint32_t full_csize = 512 * info->bootinfo.spc;
 					uint32_t this_csize = full_csize;
+					this_cluster = de.fstart;
 					while (brfatptr != NULL) {
 						printf("        <byte_run");
+						printf(" xtaf:this_cluster='%d'", this_cluster);
+						printf(" xtaf:next_cluster='%d'", brfatptr->nextval);
 						printf(" file_offset='%d'", fsize_accounted);
 						//TODO printf(" fs_offset=''");
 						//TODO printf(" img_offset=''");
@@ -1011,6 +1015,8 @@ int dfxmlify(FILE *f, char *argv, struct info_s *info, struct dot_table_s **dot_
 						printf(" len='%d'", this_csize);
 						printf(" />\n");
 						fsize_accounted += this_csize;
+
+						this_cluster = brfatptr->nextval;
 						brfatptr = brfatptr->next;
 					}
 					/* Squawk if there's a byte discrepancy, to stderr and to the XML */
