@@ -641,12 +641,15 @@ void show_info(struct info_s *info) {
 	printf("image name   = %s\n", info->imagename);
 }
 
-void cd(char *argv, struct info_s *info, struct dot_table_s *dot_table) {
+int cd(char *argv, struct info_s *info, struct dot_table_s *dot_table) {
 	struct direntry_s de;
+	int retval = 0;
 
 	de = resolve_path(info, dot_table, argv);
-	if (de.fnl == 0)
+	if (de.fnl == 0) {
 		fprintf(stderr, "cd: pathname not found: %s\n", argv);
+		retval = 1;
+	}
 	else if (de.fstart < 2)
 		info->pwd = info->rootstart; /* use 0 or 1 for root directory */
 	else
@@ -655,6 +658,7 @@ void cd(char *argv, struct info_s *info, struct dot_table_s *dot_table) {
 
 	fprintf(stderr, "cd: Debug: new pwd = %u sectors @ 0x%llx bytes into partition at %llu bytes of media\n", info->pwd,
 	    (uint64_t)(info->pwd * 512), info->imageoffset);
+	return retval;
 }
 
 int cat(char *argv, struct info_s *info, struct dot_table_s *dot_table) {
@@ -868,7 +872,10 @@ int dfxmlify(FILE *f, char *argv, struct info_s *info, struct dot_table_s **dot_
 	*(name_type+1) = 0; /* Null-terminate string */
 
 	uint32_t prevpwd = info->pwd; /*AJN: Note that cd() only mutates info->pwd*/
-	cd(argv, info, *dot_table);
+	rc = cd(argv, info, *dot_table);
+	if (rc) {
+		return rc;
+	}
 
 	/* We will loop over the clusters of the directory; but this chain might be needed for a root dir. step */
 	clust = (info->pwd - info->rootstart) / info->bootinfo.spc + 1;
