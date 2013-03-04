@@ -210,7 +210,7 @@ struct fat_s *build_fat_chain(FILE *f, struct info_s *info, uint32_t start,
 	uint32_t cluster, nc;
 
 
-        //Debug fprintf(stderr, "build_fat_chain: Debug: start = %d\n", (int) start);
+	//Debug fprintf(stderr, "build_fat_chain: Debug: start = %d\n", (int) start);
 	head = calloc(1, sizeof(struct fat_s));
 	head->nextval = (start - 1) * info->bootinfo.spc + info->rootstart;
 	list = head;
@@ -234,7 +234,7 @@ struct fat_s *build_fat_chain(FILE *f, struct info_s *info, uint32_t start,
 			fprintf(stderr, "build_fat_chain: (cluster = %u)\n", cluster);
 			return(NULL);
 		}
-                //Debug fprintf(stderr, "build_fat_chain: Debug: clust = %d\n", (int) cluster);
+		//Debug fprintf(stderr, "build_fat_chain: Debug: clust = %d\n", (int) cluster);
 		cluster = info->fatmult == 2 ? bswap16(cluster) :
 		    bswap32(cluster);
 		cluster &= info->fatmask;
@@ -257,7 +257,7 @@ struct fat_s *build_fat_chain(FILE *f, struct info_s *info, uint32_t start,
 		list = list->next;
 	}
 	/* Die if file size mismatches; directories don't report size,
-           so fat chain is the authority on length */
+	   so fat chain is the authority on length */
 	if (nc > 0 && ! (dentry_attr & 16)) {
 		fprintf(stderr, "build_fat_chain: %u clusters left in regular file\n", nc);
 		exit(1);
@@ -278,7 +278,7 @@ uint32_t find_dot_entry(struct dot_table_s *dot_table, uint32_t startcluster) {
 void add_dot_entry(struct info_s *info, struct dot_table_s **dot_table, uint32_t cluster,
     uint32_t parent, int check) {
 	struct dot_table_s *newdot;
-    
+
 	if (!check || find_dot_entry(*dot_table, cluster) == DOT_NOT_FOUND) {
 		if (info->bootinfo.spc * 512 * cluster < info->partitionsize) { /*AJN Prevent segfaults caused by reading outside image or partition size*/
 			newdot = calloc(1, sizeof(struct dot_table_s));
@@ -566,13 +566,13 @@ int ls(struct info_s *info, struct dot_table_s **dot_table) {
 				}
 			else
 				strncpy(fname, de.name, de.fnl);
-            /*AJN Check name for unprintable characters. That's a good indication that this isn't supposed to be a directory entry.*/
-            is_dent = 1;
-            for (i = 0; i < 42; i++)
-                if (!isprint(fname[i]) && fname[i] != 0)
-                    is_dent = 0;
-            if (is_dent == 0)
-                continue; /*AJN Of course, the rest of the directory's probably dead at this point.*/
+			/*AJN Check name for unprintable characters. That's a good indication that this isn't supposed to be a directory entry.*/
+			is_dent = 1;
+			for (i = 0; i < 42; i++)
+				if (!isprint(fname[i]) && fname[i] != 0)
+					is_dent = 0;
+			if (is_dent == 0)
+				continue; /*AJN Of course, the rest of the directory's probably dead at this point.*/
 			dc = dosdati(bswap16(de.cdate), bswap16(de.ctime));
 			da = dosdati(bswap16(de.adate), bswap16(de.atime));
 			du = dosdati(bswap16(de.udate), bswap16(de.utime));
@@ -780,46 +780,46 @@ void write_infofile(struct info_s *info, struct dot_table_s **dot_table) {
 int dfxml(struct info_s *info, struct dot_table_s *dot_table, int argc, char *argv[]) {
     int retval;
 
-    printf("<?xml version='1.0' encoding='UTF-8'?>\n");
-    printf("<dfxml>\n");
+	printf("<?xml version='1.0' encoding='UTF-8'?>\n");
+	printf("<dfxml>\n");
 
-    printf("  <creator version='1.0'>\n");
-    printf("    <program>%s</program>\n", PACKAGE);
-    printf("    <version>%s</version>\n", PACKAGE_VERSION);
-    printf("    <build_environment>\n");
-    printf("      <compiler>GCC %d.%d</compiler>\n",__GNUC__, __GNUC_MINOR__);
-    printf("    </build_environment>\n");
-    printf("    <execution_environment>\n");
+	printf("  <creator version='1.0'>\n");
+	printf("    <program>%s</program>\n", PACKAGE);
+	printf("    <version>%s</version>\n", PACKAGE_VERSION);
+	printf("    <build_environment>\n");
+	printf("      <compiler>GCC %d.%d</compiler>\n",__GNUC__, __GNUC_MINOR__);
+	printf("    </build_environment>\n");
+	printf("    <execution_environment>\n");
 #ifdef HAVE_SYS_UTSNAME_H
-    struct utsname name;
-    if(uname(&name)==0){
-	printf("      <os_sysname>%s</os_sysname>\n",name.sysname);
-	printf("      <os_release>%s</os_release>\n",name.release);
-	printf("      <os_version>%s</os_version>\n",name.version);
-	printf("      <host>%s</host>\n",name.nodename);
-	printf("      <arch>%s</arch>\n",name.machine);
-    }
+	struct utsname name;
+	if(uname(&name)==0){
+		printf("      <os_sysname>%s</os_sysname>\n",name.sysname);
+		printf("      <os_release>%s</os_release>\n",name.release);
+		printf("      <os_version>%s</os_version>\n",name.version);
+		printf("      <host>%s</host>\n",name.nodename);
+		printf("      <arch>%s</arch>\n",name.machine);
+	}
 #else
-    printf("<!--No sys/utsname, cannot print sys info-->\n");
+	printf("<!--No sys/utsname, cannot print sys info-->\n");
 #endif
-    printf("    </execution_environment>\n");
-      int i;
-      printf("    <source>%s</source>\n", info->imagename);
-      printf("    <command_line>");
-      for(i = 0; i < argc; i++){
-          if (i > 0)
-            printf(" ");
-          printf("%s", argv[i]);
-      }
-      printf("    </command_line>\n");
-    printf("  </creator>\n");
+	printf("    </execution_environment>\n");
+	int i;
+	printf("    <source>%s</source>\n", info->imagename);
+	printf("    <command_line>");
+	for(i = 0; i < argc; i++){
+		if (i > 0)
+			printf(" ");
+		printf("%s", argv[i]);
+	}
+	printf("    </command_line>\n");
+	printf("  </creator>\n");
 
 	//Start processing file
 	FILE *f;
 	f = fopen(info->imagename, "rb");
 	if (f == NULL) {
 		fprintf(stderr, "Error opening %s: %i\n",
-                info->imagename, errno);
+		    info->imagename, errno);
 		return(errno);
 	}
 	printf("  <sectorsize>512</sectorsize>\n");
