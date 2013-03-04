@@ -869,13 +869,18 @@ int dfxmlify(FILE *f, char *argv, struct info_s *info, struct dot_table_s **dot_
 
 	uint32_t prevpwd = info->pwd; /*AJN: Note that cd() only mutates info->pwd*/
 	cd(argv, info, *dot_table);
-	/*BEGIN COPY*/
 
+	/* We will loop over the clusters of the directory; but this chain might be needed for a root dir. step */
 	clust = (info->pwd - info->rootstart) / info->bootinfo.spc + 1;
 	printf("    <!-- Starting clust: %d -->\n", clust);
+
+	fatptr = build_fat_chain(f, info, clust, 512 * info->bootinfo.spc, 0);
+
+	/*BEGIN COPY*/
+
 	/* Loop over clusters of the directory */
 	for (
-	  fatptr = build_fat_chain(f, info, clust, 512 * info->bootinfo.spc, 0);
+	  ;
 	  fatptr != NULL;
 	  fatptr = fatptr->next) {
 		rc = fseek(f, (uint64_t)(info->imageoffset + 512 * fatptr->nextval), SEEK_SET);
