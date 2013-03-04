@@ -1039,11 +1039,11 @@ int dfxmlify(FILE *f, char *argv, struct info_s *info, struct dot_table_s **dot_
 					this_cluster = de.fstart;
 					while (brfatptr != NULL) {
 						printf("        <byte_run");
-						printf(" xtaf:this_cluster='%d'", this_cluster);
-						printf(" xtaf:next_cluster='%d'", brfatptr->nextval);
-						printf(" file_offset='%d'", fsize_accounted);
-						//TODO printf(" fs_offset=''");
-						//TODO printf(" img_offset=''");
+						//printf(" xtaf:this_cluster='%d'", this_cluster);
+						//printf(" xtaf:next_cluster='%d'", brfatptr->nextval);
+						printf(" file_offset='%zu'", fsize_accounted);
+						printf(" fs_offset='%llu'", 512 * brfatptr->nextval);
+						printf(" img_offset='%llu'", info->imageoffset + 512 * brfatptr->nextval);
 						if (fsize_accounted + full_csize > de.fsize) {
 							this_csize = de.fsize - fsize_accounted;
 						}
