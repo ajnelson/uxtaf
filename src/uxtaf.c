@@ -926,8 +926,13 @@ int dfxmlify(FILE *f, char *argv, struct info_s *info, struct dot_table_s **dot_
 		"filename\n");*/
 		/* Loop over entries in the directory */
 		/* AJN TODO Is this loop condition actually right? Why SPC, instead of dents per cluster? */
-		for (entry = 0; entry < info->bootinfo.spc; entry++) {
-//			rc = fseek(f, (uint64_t)(info->imageoffset + dir_off), SEEK_SET); /*Reset file pointer, in case build_fat_chain reads and doesn't clean up state*/
+		uint32_t dents_per_cluster = 512 * info->bootinfo.spc / sizeof(struct direntry_s);
+		for (entry = 0; entry < dents_per_cluster; entry++) {
+			rc = fseek(f, (uint64_t)(dir_off + entry*sizeof(struct direntry_s)), SEEK_SET); /*Reset file pointer, in case we recursed and didn't reset state*/
+			if (rc) {
+				fprintf(stderr, "dfxmlify: fseek failed resetting at the top of the dirent loop.\n");
+				return 1;
+			}
 			dent_off = ftello(f);
 			s = fread(&de, sizeof(struct direntry_s), 1, f);
 			if (s != 1) {
