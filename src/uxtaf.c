@@ -1030,6 +1030,7 @@ int dfxmlify(FILE *f, char *argv, struct info_s *info, struct dot_table_s **dot_
 				printf("    </fileobject>\n");
 				fflush(stdout);
 
+				/* Recurse into an allocated directory */
 				if (de.fnl != 0xe5 && (de.attr & 16)) {
 					add_dot_entry(info, dot_table, de.fstart, clust, 1);
 					/*Recurse*/
@@ -1042,10 +1043,10 @@ int dfxmlify(FILE *f, char *argv, struct info_s *info, struct dot_table_s **dot_
 						fprintf(stderr, "dfxmlify: Error in recursive call, retval=%d; terminating.\n", retval);
 						break;
 					}
-				}
-			}
-		}
-	}
+				} /* End if (allocated directory) */
+			} /* End if (successful path concatenation) */
+		} /* End for (loop through directory entries) */
+	} /* End for (looping over clusters of directory) */
 	/*END COPY*/
 	info->pwd = prevpwd; /*AJN: Reset pwd after finished with this directory*/
 	fflush(stdout);
