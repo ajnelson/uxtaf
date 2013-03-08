@@ -1017,7 +1017,7 @@ int dfxmlify(FILE *f, char *argv, struct info_s *info, struct dot_table_s **dot_
 				printf("      <mtime>%04u-%02u-%02uT%02u:%02u:%02uZ</mtime>\n", du.year, du.month, du.day, du.hour, du.minute, du.second);
 				int sect = (clust-1) * 32 + (entry/8); /* TODO Relate these hard-coded values to info-> values */
 				int inode = 3 + 8 * sect + (entry%8);
-				printf("      <st_ino>%d</st_ino>\n", inode );
+				printf("      <inode>%d</inode>\n", inode );
 				/*
 				 * TODO:
 				 *      <hashdigest type='md5'></hashdigest>
