@@ -784,8 +784,13 @@ void write_infofile(struct info_s *info, struct dot_table_s **dot_table) {
 	fclose(infofile);
 }
 
-int dfxml(struct info_s *info, struct dot_table_s *dot_table, int argc, char *argv[]) {
-    int retval;
+int dfxml_head(int argc, char *argv[]) {
+	int retval = 0;
+	int i;
+
+	if (argc < 3) {
+		fprintf(stderr, "dfxml_head: Error: Expecting at least two arguments to uxtaf.\n");
+	}
 
 	printf("<?xml version='1.0' encoding='UTF-8'?>\n");
 	printf("<dfxml>\n");
@@ -810,18 +815,23 @@ int dfxml(struct info_s *info, struct dot_table_s *dot_table, int argc, char *ar
 	printf("<!--No sys/utsname, cannot print sys info-->\n");
 #endif
 	printf("    </execution_environment>\n");
-	int i;
-	printf("    <source>%s</source>\n", info->imagename);
+	printf("    <source>%s</source>\n", argv[2]);
 	printf("    <command_line>");
 	for(i = 0; i < argc; i++){
 		if (i > 0)
 			printf(" ");
 		printf("%s", argv[i]);
 	}
-	printf("    </command_line>\n");
+	printf("</command_line>\n");
 	printf("  </creator>\n");
+	printf("  <sectorsize>512</sectorsize>\n");
+	return retval;
+}
 
+int dfxml_body(struct info_s *info, struct dot_table_s *dot_table, int argc, char *argv[]) {
 	//Start processing file
+	int retval = 0;
+	int i;
 	FILE *f;
 	f = fopen(info->imagename, "rb");
 	if (f == NULL) {
@@ -829,7 +839,13 @@ int dfxml(struct info_s *info, struct dot_table_s *dot_table, int argc, char *ar
 		    info->imagename, errno);
 		return(errno);
 	}
-	printf("  <sectorsize>512</sectorsize>\n");
+	printf("  <!--<command_line>");
+	for(i = 0; i < argc; i++){
+		if (i > 0)
+			printf(" ");
+		printf("%s", argv[i]);
+	}
+	printf("</command_line>-->\n");
 	printf("  <volume offset=\"%llu\">\n", info->imageoffset);
 	printf("    <partition_offset>%llu</partition_offset>\n", info->imageoffset);
 	printf("    <block_size>%u</block_size>\n", (info->bootinfo.spc) * 512);
@@ -852,9 +868,12 @@ int dfxml(struct info_s *info, struct dot_table_s *dot_table, int argc, char *ar
 	if (retval != 0) printf("    <!--Error: dfxml conversion of this partition failed.-->");
 	printf("  </volume>\n");
         fclose(f);
-
-	printf("</dfxml>\n");
 	return retval;
+}
+
+int dfxml_foot(){
+	printf("</dfxml>\n");
+	return 0;
 }
 
 /* Convert an entire partition to DFXML */
@@ -1111,7 +1130,7 @@ int main(int argc, char *argv[]) {
 	if (argc < 2)
 		return(usage());
 
-	if (strcmp(argv[1], "attach"))
+	if (strcmp(argv[1], "attach") && strcmp(argv[1], "dfxml_head"))
 		read_infofile(&info, &dot_table);
 
 	if (!strcmp(argv[1], "attach") && (argc == 3 || argc == 4)) {
@@ -1138,7 +1157,11 @@ int main(int argc, char *argv[]) {
 	else if (!strcmp(argv[1], "cd") && argc == 3)
 		cd(argv[2], &info, dot_table);
 	else if (!strcmp(argv[1], "dfxml") && argc == 2)
-		ret = dfxml(&info, dot_table, argc, argv);
+		ret = dfxml_body(&info, dot_table, argc, argv);
+	else if (!strcmp(argv[1], "dfxml_head") && argc == 3)
+		ret = dfxml_head(argc, argv);
+	else if (!strcmp(argv[1], "dfxml_foot") && argc == 2)
+		ret = dfxml_foot();
 	else
 		return(usage());
 
