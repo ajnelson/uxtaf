@@ -84,6 +84,10 @@ uint32_t bswap32(uint32_t x) {
 #define FAT16_MASK 0x0000ffff
 #define DOT_NOT_FOUND 0xfffffff0
 
+/* Use The SleuthKit convention for "inode" numbering */
+#define XTAFFS_ROOTINO 2
+#define XTAFFS_FIRST_NORMINO 3
+
 struct boot_s { /* 20 bytes */
 	char magic[4]; /* should be "XTAF" */
 	uint32_t volid; /* volume id */
@@ -137,6 +141,7 @@ struct info_s {
 	uint64_t mediasize; /* TODO Distinguish in code between media size and partition size */
 	uint32_t fatsecs;
 	uint64_t imageoffset; /* offset within the image file (for a partition within a disk image) */
+	uint8_t dentries_per_sector; /* max. number of dentries per sector */
 	char imagename[256]; /* max file name length */
 };
 
@@ -414,6 +419,8 @@ int attach(struct info_s *info, struct dot_table_s **dot_table) {
 	}
 
 	fclose(f);
+
+	info->dentries_per_sector = 512 / sizeof(struct direntry_s);
 
 	info->pwd = info->rootstart; /* sensible start */
 	*dot_table = NULL;
@@ -888,6 +895,7 @@ int dfxmlify(FILE *f, char *argv, struct info_s *info, struct dot_table_s **dot_
 	if (!strncmp(argv, "/", 42)) {
 		printf("    <fileobject>\n");
 		printf("      <filename></filename><!--Root directory-->\n");
+		printf("      <inode>%d</inode>\n", XTAFFS_ROOTINO);
 		printf("      <byte_runs>\n");
 		this_cluster = clust;
 		for (
@@ -1015,8 +1023,8 @@ int dfxmlify(FILE *f, char *argv, struct info_s *info, struct dot_table_s **dot_
 				printf("      <crtime>%04u-%02u-%02uT%02u:%02u:%02uZ</crtime>\n", dc.year, dc.month, dc.day, dc.hour, dc.minute, dc.second);
 				printf("      <atime>%04u-%02u-%02uT%02u:%02u:%02uZ</atime>\n", da.year, da.month, da.day, da.hour, da.minute, da.second);
 				printf("      <mtime>%04u-%02u-%02uT%02u:%02u:%02uZ</mtime>\n", du.year, du.month, du.day, du.hour, du.minute, du.second);
-				int sect = (clust-1) * 32 + (entry/8); /* TODO Relate these hard-coded values to info-> values */
-				int inode = 3 + 8 * sect + (entry%8);
+				int sect = (clust-1) * info->bootinfo.spc + (entry / info->dentries_per_sector);
+				int inode = XTAFFS_FIRST_NORMINO + info->dentries_per_sector * sect + (entry % info->dentries_per_sector);
 				printf("      <inode>%d</inode>\n", inode );
 				/*
 				 * TODO:
