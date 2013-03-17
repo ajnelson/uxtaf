@@ -41,6 +41,8 @@ See uxtaf.txt for usage information.
 #include <sys/utsname.h>
 #endif
 
+#include <openssl/sha.h>
+
 #include <sys/types.h>
 
 /* Undefine this if you have a big endian box */
@@ -712,6 +714,107 @@ int cat(char *argv, struct info_s *info, struct dot_table_s *dot_table) {
 	return(0);
 }
 
+/* 
+ * Helper function to make a Python hexdigest()-like interface
+ *
+ * Caller is responsible for free()-ing successful result.
+ */
+char *sha_to_hex(const unsigned char *in) {
+	char *retval;
+	int i;
+
+	if (in == NULL) {
+		fprintf(stderr, "sha_to_hex: Warning: passed null input.\n");
+		return NULL;
+	}
+
+	retval = calloc(SHA_DIGEST_LENGTH * 2 + 1, sizeof(char));
+	if (retval == NULL) {
+		fprintf(stderr, "sha_to_hex: Error: calloc() failed.\n");
+		return NULL;
+	}
+
+	for (i=0; i<SHA_DIGEST_LENGTH; i++) {
+		snprintf(retval + i*2, 3, "%02x", in[i]);
+	}
+	return retval;
+}
+
+/* 
+ * Argument 'result' should be passed in as a pointer to NULL; this function allocates it, and the caller is responsible for free()-ing.
+ *
+ * Recall the openssl functions return 1 on success, 0 on failure
+ *   http://www.openssl.org/docs/crypto/sha.html
+ */
+int sha1(struct direntry_s de, struct info_s *info, struct dot_table_s *dot_table, char **result) {
+#ifndef SHA_DIGEST_LENGTH
+	return(ENOSYS);
+#else
+	size_t s;
+	FILE *f;
+	int rc;
+	struct fat_s *fatptr;
+	char *buf;
+	uint32_t rest;
+	unsigned char hash[SHA_DIGEST_LENGTH];
+	SHA_CTX ctx;
+
+	if (*result != NULL) {
+		fprintf(stderr, "sha1: Called with '*result' allocated, but sha1() is supposed to allocate.\n");
+		return(1);
+	}
+
+	if (de.fnl == 0) {
+		fprintf(stderr, "sha1: Received bad directory entry.\n");
+		return(ENOENT);
+	}
+	rest = de.fsize % (512 * info->bootinfo.spc);
+
+	rc = SHA1_Init(&ctx);
+	if (rc != 1) {
+		fprintf(stderr, "sha1: SHA1_Init error.\n");
+		return(1);
+	}
+
+	f = fopen(info->imagename, "rb");
+	if (f == NULL) {
+		fprintf(stderr, "Error opening %s: %i\n",
+		    info->imagename, errno);
+		return(errno);
+	}
+	buf = calloc(512 * info->bootinfo.spc, sizeof(char));
+	for (fatptr = build_fat_chain(f, info, de.fstart, de.fsize, de.attr);
+	    fatptr != NULL; fatptr = fatptr->next) {
+		rc = fseek(f, (uint64_t)(info->imageoffset + 512 * fatptr->nextval), SEEK_SET);
+		if (rc < 0) {
+			fprintf(stderr, "sha1: fseeko error, errno %d", errno);
+			return(EIO);
+		}
+
+		s = fread(buf, sizeof(char), 512 * info->bootinfo.spc, f);
+		if (s != 512 * info->bootinfo.spc) {
+			fprintf(stderr, "sha1: s = %zu\n", s);
+			return(1);
+		}
+		rc = SHA1_Update(&ctx, buf, fatptr->next != NULL || rest == 0 ? 512 * info->bootinfo.spc : rest);
+		if (rc != 1) {
+			fprintf(stderr, "sha1: SHA1_Update error.\n");
+			return(1);
+		}
+	}
+	rc = SHA1_Final(hash, &ctx);
+	if (rc != 1) {
+		fprintf(stderr, "sha1: SHA1_Final error.\n");
+		return(1);
+	}
+
+	*result = sha_to_hex(hash);
+
+	fclose(f);
+	return(0);
+#endif
+}
+
 void show_dot_table(struct dot_table_s *dot_table) {
 	struct dot_table_s *dot;
 
@@ -896,6 +999,7 @@ int dfxmlify(FILE *f, char *argv, struct info_s *info, struct dot_table_s **dot_
 	int is_dent;
 	int is_alloc;
 	uint32_t this_cluster;
+	char *the_sha1 = NULL;
 	char name_type[2];
 	*(name_type+1) = 0; /* Null-terminate string */
 
@@ -1047,10 +1151,23 @@ int dfxmlify(FILE *f, char *argv, struct info_s *info, struct dot_table_s **dot_
 				int sect = (clust-1) * info->bootinfo.spc + (entry / info->dentries_per_sector);
 				int inode = XTAFFS_FIRST_NORMINO + info->dentries_per_sector * sect + (entry % info->dentries_per_sector);
 				printf("      <inode>%d</inode>\n", inode );
+#ifdef SHA_DIGEST_LENGTH
+				if (!is_dir) {
+					rc = sha1(de, info, *dot_table, &the_sha1);
+					if (the_sha1 == NULL) {
+						printf("      <!-- Error calculating sha1 (return code %d) -->\n", rc);
+						fprintf(stderr, "Error calculating sha1 (return code %d) for file: %s\n", rc, full_path);
+					} else {
+						printf("      <hashdigest type='sha1'>%s</hashdigest>\n", the_sha1);
+						/* Caller must free. */
+						free(the_sha1);
+						the_sha1 = NULL;
+					}
+				}
+#endif
 				/*
 				 * TODO:
 				 *      <hashdigest type='md5'></hashdigest>
-				 *      <hashdigest type='sha1'></hashdigest>
 				 *
 				 * */
 				/*printf("%5u %c%c%c%c%c%c %10u\n",

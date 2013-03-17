@@ -11,6 +11,10 @@ AC_CONFIG_HEADERS([config.h])
 AC_PROG_CC
 
 # Checks for libraries.
+AC_CHECK_LIB([ssl], [SSL_library_init], [],
+             [AC_MSG_NOTICE([cannot find openssl ssl lib; SHA1s of file data will not be calculated.])])
+AC_CHECK_LIB([crypto], [EVP_EncryptInit], [],
+             [AC_MSG_FAILURE([cannot find openssl crypto lib; SHA1s of file data will not be calculated.])])
 
 # Checks for header files.
 AC_CHECK_HEADERS([limits.h stdint.h stdlib.h string.h strings.h sys/utsname.h])
