@@ -697,6 +697,7 @@ int cat(char *argv, struct info_s *info, struct dot_table_s *dot_table) {
 		rc = fseek(f, (uint64_t)(info->imageoffset + 512 * fatptr->nextval), SEEK_SET);
 		if (rc < 0) {
 			fprintf(stderr, "cat: fseeko error, errno %d", errno);
+			return(EIO);
 		}
 
 		s = fread(buf, sizeof(char), 512 * info->bootinfo.spc, f);
