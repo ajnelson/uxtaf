@@ -1036,6 +1036,7 @@ int dfxmlify(FILE *f, char *argv, struct info_s *info, struct dot_table_s **dot_
 				/*TODO guarantee that len(full_path) >= 1*/
 				printf("      <filename>%s</filename>\n",full_path+1); /*AJN DFXML has a history of not starting paths with '/' */
 				printf("      <xtaf:filenamelength>%u</xtaf:filenamelength>\n", de.fnl);
+				printf("      <xtaf:flags>%u</xtaf:flags>\n", de.attr);
 				if (*name_type) printf("      <name_type>%s</name_type>\n", name_type);
 				printf("      <filesize>%d</filesize>\n", de.fsize);
 				printf("      <alloc>%d</alloc>\n", is_alloc);
