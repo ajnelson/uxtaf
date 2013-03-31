@@ -1145,9 +1145,9 @@ int dfxmlify(FILE *f, char *argv, struct info_s *info, struct dot_table_s **dot_
 				if (*name_type) printf("      <name_type>%s</name_type>\n", name_type);
 				printf("      <filesize>%d</filesize>\n", de.fsize);
 				printf("      <alloc>%d</alloc>\n", is_alloc);
-				printf("      <crtime>%04u-%02u-%02uT%02u:%02u:%02uZ</crtime>\n", dc.year, dc.month, dc.day, dc.hour, dc.minute, dc.second);
-				printf("      <atime>%04u-%02u-%02uT%02u:%02u:%02uZ</atime>\n", da.year, da.month, da.day, da.hour, da.minute, da.second);
-				printf("      <mtime>%04u-%02u-%02uT%02u:%02u:%02uZ</mtime>\n", du.year, du.month, du.day, du.hour, du.minute, du.second);
+				printf("      <crtime prec=\"2\">%04u-%02u-%02uT%02u:%02u:%02uZ</crtime>\n", dc.year, dc.month, dc.day, dc.hour, dc.minute, dc.second);
+				printf("      <atime prec=\"2\">%04u-%02u-%02uT%02u:%02u:%02uZ</atime>\n", da.year, da.month, da.day, da.hour, da.minute, da.second);
+				printf("      <mtime prec=\"2\">%04u-%02u-%02uT%02u:%02u:%02uZ</mtime>\n", du.year, du.month, du.day, du.hour, du.minute, du.second);
 				int sect = (clust-1) * info->bootinfo.spc + (entry / info->dentries_per_sector);
 				int inode = XTAFFS_FIRST_NORMINO + info->dentries_per_sector * sect + (entry % info->dentries_per_sector);
 				printf("      <inode>%d</inode>\n", inode );
