@@ -133,9 +133,9 @@ struct info_s {
 	uint32_t pwd; /* sector of curdir */
 	uint32_t fatmask;
 	uint8_t fatmult;
-	uint32_t fatstart;
+	uint32_t fatstart; /* Unit: Sectors */
 	uint32_t fatsize;
-	uint32_t rootstart;
+	uint32_t rootstart; /* Unit: Sectors */
 	uint32_t firstcluster;
 	uint32_t maxcluster;
 	uint32_t numclusters;
@@ -961,6 +961,7 @@ int dfxml_body(struct info_s *info, struct dot_table_s *dot_table, int argc, cha
 		printf("    <!--Warning: Unknown if this is XTAF16, 32, or something new.-->\n");
 		printf("    <ftype_str>XTAF</ftype_str>\n");
 	}
+	printf("    <xtaf:root_directory_offset>%d</xtaf:root_directory_offset><!--This is %d 512-byte sectors from the start of the file system.-->\n", info->rootstart*512, info->rootstart);
 /* TODO Add these other volume elements
     <ftype>256</ftype> (Probably not this one, it's a number only TSK defines)
     <block_count>235516</block_count> (Is this in sectors or blocks(==clusters)?)
