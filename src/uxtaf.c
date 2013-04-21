@@ -420,6 +420,16 @@ int attach(struct info_s *info, struct dot_table_s **dot_table) {
 		info->maxcluster = info->numclusters - 1;
 	}
 
+	/*
+	fprintf(stderr, "attach: Debug: fatstart = %i\n", info->fatstart);
+	fprintf(stderr, "attach: Debug: fatsecs = %i\n", info->fatsecs);
+	fprintf(stderr, "attach: Debug: partitionsize = %llu\n", info->partitionsize);
+	fprintf(stderr, "attach: Debug: numclusters = %i\n", info->numclusters);
+	fprintf(stderr, "attach: Debug: sectors_per_cluster = %i\n", info->bootinfo.spc);
+	fprintf(stderr, "attach: Debug: rootstart = %i sectors\n", info->rootstart);
+	fprintf(stderr, "attach: Debug: rootstart = %i bytes\n", info->rootstart * 512);
+	*/
+
 	fclose(f);
 
 	info->dentries_per_sector = 512 / sizeof(struct direntry_s);
