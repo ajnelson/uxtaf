@@ -907,9 +907,14 @@ int dfxml_head(int argc, char *argv[]) {
 	}
 
 	printf("<?xml version='1.0' encoding='UTF-8'?>\n");
-	printf("<dfxml>\n");
+	printf("<dfxml\n");
+	printf("  xmlns=\"http://www.forensicswiki.org/wiki/Category:Digital_Forensics_XML\"\n");
+	printf("  xmlns:dc=\"http://purl.org/dc/elements/1.1/\"\n");
+	printf("  xmlns:xsi=\"http://www.w3.org/2001/XMLSchema-instance\"\n");
+	printf("  xmlns:xtaf=\"http://www.forensicswiki.org/wiki/XTAF\"\n");
+	printf("  version='1.1.0'>\n");
 
-	printf("  <creator version='1.0'>\n");
+	printf("  <creator>\n");
 	printf("    <program>%s</program>\n", PACKAGE);
 	printf("    <version>%s</version>\n", PACKAGE_VERSION);
 	printf("    <build_environment>\n");
