@@ -914,6 +914,9 @@ int dfxml_head(int argc, char *argv[]) {
 	printf("  xmlns:xtaf=\"http://www.forensicswiki.org/wiki/XTAF\"\n");
 	printf("  version='1.1.0'>\n");
 
+	printf("  <metadata>\n");
+	printf("    <dc:type>Disk image</dc:type>\n");
+	printf("  </metadata>\n");
 	printf("  <creator>\n");
 	printf("    <program>%s</program>\n", PACKAGE);
 	printf("    <version>%s</version>\n", PACKAGE_VERSION);
@@ -933,17 +936,18 @@ int dfxml_head(int argc, char *argv[]) {
 #else
 	printf("<!--No sys/utsname, cannot print sys info-->\n");
 #endif
-	printf("    </execution_environment>\n");
-	printf("    <source>%s</source>\n", argv[2]);
-	printf("    <command_line>");
+	printf("      <command_line>");
 	for(i = 0; i < argc; i++){
 		if (i > 0)
 			printf(" ");
 		printf("%s", argv[i]);
 	}
 	printf("</command_line>\n");
+	printf("    </execution_environment>\n");
 	printf("  </creator>\n");
-	printf("  <sectorsize>512</sectorsize>\n");
+	printf("  <source>\n");
+	printf("    <image_filename>%s</image_filename>\n", argv[2]);
+	printf("  </source>\n");
 	return retval;
 }
 
@@ -967,6 +971,7 @@ int dfxml_body(struct info_s *info, struct dot_table_s *dot_table, int argc, cha
 	printf("</command_line>-->\n");
 	printf("  <volume offset=\"%llu\">\n", info->imageoffset);
 	printf("    <partition_offset>%llu</partition_offset>\n", info->imageoffset);
+	printf("    <sector_size>512</sector_size>\n");
 	printf("    <block_size>%u</block_size>\n", (info->bootinfo.spc) * 512);
 	if (info->fatmask == FAT32_MASK) {
 		printf("    <ftype_str>XTAF32</ftype_str>\n");
@@ -1035,6 +1040,7 @@ int dfxmlify(FILE *f, char *argv, struct info_s *info, struct dot_table_s **dot_
 	if (!strncmp(argv, "/", 42)) {
 		printf("    <fileobject>\n");
 		printf("      <filename></filename><!--Root directory-->\n");
+		printf("      <alloc>1</alloc>\n");
 		printf("      <inode>%d</inode>\n", XTAFFS_ROOTINO);
 		printf("      <byte_runs>\n");
 		this_cluster = clust;
@@ -1156,45 +1162,19 @@ int dfxmlify(FILE *f, char *argv, struct info_s *info, struct dot_table_s **dot_
 			} else {
 				/*TODO guarantee that len(full_path) >= 1*/
 				printf("      <filename>%s</filename>\n",full_path+1); /*AJN DFXML has a history of not starting paths with '/' */
-				printf("      <xtaf:filenamelength>%u</xtaf:filenamelength>\n", de.fnl);
-				printf("      <xtaf:flags>%u</xtaf:flags>\n", de.attr);
 				if (*name_type) printf("      <name_type>%s</name_type>\n", name_type);
 				printf("      <filesize>%d</filesize>\n", de.fsize);
 				printf("      <alloc>%d</alloc>\n", is_alloc);
-				printf("      <crtime prec=\"2\">%04u-%02u-%02uT%02u:%02u:%02uZ</crtime>\n", dc.year, dc.month, dc.day, dc.hour, dc.minute, dc.second);
-				printf("      <atime prec=\"2\">%04u-%02u-%02uT%02u:%02u:%02uZ</atime>\n", da.year, da.month, da.day, da.hour, da.minute, da.second);
-				printf("      <mtime prec=\"2\">%04u-%02u-%02uT%02u:%02u:%02uZ</mtime>\n", du.year, du.month, du.day, du.hour, du.minute, du.second);
 				int sect = (clust-1) * info->bootinfo.spc + (entry / info->dentries_per_sector);
 				int inode = XTAFFS_FIRST_NORMINO + info->dentries_per_sector * sect + (entry % info->dentries_per_sector);
 				printf("      <inode>%d</inode>\n", inode );
-#ifdef SHA_DIGEST_LENGTH
-				if (!is_dir) {
-					rc = sha1(de, info, *dot_table, &the_sha1);
-					if (the_sha1 == NULL) {
-						printf("      <!-- Error calculating sha1 (return code %d) -->\n", rc);
-						fprintf(stderr, "Error calculating sha1 (return code %d) for file: %s\n", rc, full_path);
-					} else {
-						printf("      <hashdigest type='sha1'>%s</hashdigest>\n", the_sha1);
-						/* Caller must free. */
-						free(the_sha1);
-						the_sha1 = NULL;
-					}
-				}
-#endif
-				/*
-				 * TODO:
-				 *      <hashdigest type='md5'></hashdigest>
-				 *
-				 * */
-				/*printf("%5u %c%c%c%c%c%c %10u\n",
-				entry,
-				(de.attr & 1 ? 'r' : '-'),
-				(de.attr & 2 ? 'h' : '-'),
-				(de.attr & 4 ? 's' : '-'),
-				(de.attr & 8 ? 'v' : '-'),
-				(de.attr & 16 ? 'd' : '-'),
-				(de.attr & 32 ? 'a' : '-'),
-				de.fstart);*/
+				printf("      <mtime prec=\"2\">%04u-%02u-%02uT%02u:%02u:%02uZ</mtime>\n", du.year, du.month, du.day, du.hour, du.minute, du.second);
+				printf("      <atime prec=\"2\">%04u-%02u-%02uT%02u:%02u:%02uZ</atime>\n", da.year, da.month, da.day, da.hour, da.minute, da.second);
+				printf("      <crtime prec=\"2\">%04u-%02u-%02uT%02u:%02u:%02uZ</crtime>\n", dc.year, dc.month, dc.day, dc.hour, dc.minute, dc.second);
+
+				/* Output XTAF-namespaced elements in one of the "Other-namespace" positions */
+				printf("      <xtaf:filenamelength>%u</xtaf:filenamelength>\n", de.fnl);
+				printf("      <xtaf:flags>%u</xtaf:flags>\n", de.attr);
 
 				/* Build byte runs if possible */
 				struct fat_s *brfatptr = build_fat_chain(f, info, de.fstart, de.fsize, de.attr);
@@ -1229,6 +1209,35 @@ int dfxmlify(FILE *f, char *argv, struct info_s *info, struct dot_table_s **dot_
 					}
 					printf("      </byte_runs>\n");
 				}
+                                /* Calculate checksums */
+#ifdef SHA_DIGEST_LENGTH
+				if (!is_dir) {
+					rc = sha1(de, info, *dot_table, &the_sha1);
+					if (the_sha1 == NULL) {
+						printf("      <!-- Error calculating sha1 (return code %d) -->\n", rc);
+						fprintf(stderr, "Error calculating sha1 (return code %d) for file: %s\n", rc, full_path);
+					} else {
+						printf("      <hashdigest type='sha1'>%s</hashdigest>\n", the_sha1);
+						/* Caller must free. */
+						free(the_sha1);
+						the_sha1 = NULL;
+					}
+				}
+#endif
+				/*
+				 * TODO:
+				 *      <hashdigest type='md5'></hashdigest>
+				 *
+				 * */
+				/*printf("%5u %c%c%c%c%c%c %10u\n",
+				entry,
+				(de.attr & 1 ? 'r' : '-'),
+				(de.attr & 2 ? 'h' : '-'),
+				(de.attr & 4 ? 's' : '-'),
+				(de.attr & 8 ? 'v' : '-'),
+				(de.attr & 16 ? 'd' : '-'),
+				(de.attr & 32 ? 'a' : '-'),
+				de.fstart);*/
 
 				printf("    </fileobject>\n");
 				fflush(stdout);
