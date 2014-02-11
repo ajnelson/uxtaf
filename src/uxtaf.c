@@ -139,6 +139,7 @@ struct info_s {
 	uint32_t firstcluster;
 	uint32_t maxcluster;
 	uint32_t numclusters;
+	uint8_t quirkblock;
 	uint64_t partitionsize; /* Unit: Bytes */
 	uint64_t mediasize; /* TODO Distinguish in code between media size and partition size */
 	uint32_t fatsecs;
@@ -404,8 +405,12 @@ int attach(struct info_s *info, struct dot_table_s **dot_table) {
 	for (i = 0; i < 4096 && quirkblk[i] == 0; i++)
 		;
 	fprintf(stderr, "quirk: i = %i quirkblk[i] = %u\n", i, quirkblk[i]);
-	if (i == 4096)
+	if (i == 4096) {
+                info->quirkblock = 1;
 		info->rootstart += 8;
+	} else {
+                info->quirkblock = 0;
+	}
 	fprintf(stderr, "rootstart after : div=%i mod=%i\n",
 	    info->rootstart / info->bootinfo.spc,
 	    info->rootstart % info->bootinfo.spc);
@@ -910,6 +915,7 @@ int dfxml_head(int argc, char *argv[]) {
 	printf("<dfxml\n");
 	printf("  xmlns=\"http://www.forensicswiki.org/wiki/Category:Digital_Forensics_XML\"\n");
 	printf("  xmlns:dc=\"http://purl.org/dc/elements/1.1/\"\n");
+	printf("  xmlns:uxtaf=\"http://www.forensicswiki.org/wiki/uxtaf\"\n");
 	printf("  xmlns:xsi=\"http://www.w3.org/2001/XMLSchema-instance\"\n");
 	printf("  xmlns:xtaf=\"http://www.forensicswiki.org/wiki/XTAF\"\n");
 	printf("  version='1.1.0'>\n");
@@ -982,6 +988,7 @@ int dfxml_body(struct info_s *info, struct dot_table_s *dot_table, int argc, cha
 		printf("    <ftype_str>XTAF</ftype_str>\n");
 	}
 	printf("    <xtaf:root_directory_offset>%d</xtaf:root_directory_offset><!--This is %d 512-byte sectors from the start of the file system.-->\n", info->rootstart*512, info->rootstart);
+	printf("    <uxtaf:quirk_block>%s</uxtaf:quirk_block>\n", info->quirkblock ? "True" : "False");
 /* TODO Add these other volume elements
     <ftype>256</ftype> (Probably not this one, it's a number only TSK defines)
     <block_count>235516</block_count> (Is this in sectors or blocks(==clusters)?)
