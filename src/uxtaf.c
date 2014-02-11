@@ -211,7 +211,7 @@ int read_boot(FILE *f, struct boot_s *b) {
 }
 
 struct fat_s *build_fat_chain(FILE *f, struct info_s *info, uint32_t start,
-    uint32_t size, uint8_t dentry_attr) {
+    uint32_t size, uint8_t dentry_attr, uint32_t *nc_remaining) {
 	int rc;
 	struct fat_s *head, *list, *this;
 	size_t s;
@@ -220,6 +220,10 @@ struct fat_s *build_fat_chain(FILE *f, struct info_s *info, uint32_t start,
 
 	//Debug fprintf(stderr, "build_fat_chain: Debug: start = %d\n", (int) start);
 	head = calloc(1, sizeof(struct fat_s));
+        if (head == NULL) {
+		fprintf(stderr, "build_fat_chain: Out of memory, allocating list head.\n");
+		exit(ENOMEM);
+        }
 	head->nextval = (start - 1) * info->bootinfo.spc + info->rootstart;
 	list = head;
 	cluster = start;
@@ -231,10 +235,12 @@ struct fat_s *build_fat_chain(FILE *f, struct info_s *info, uint32_t start,
 		rc = fseeko(f, (uint64_t)(info->imageoffset + info->fatstart * 512 + cluster *
 		    info->fatmult), SEEK_SET);
 		if (rc < 0) {
-			fprintf(stderr, "build_fat_chain: fseeko error, errno %d", errno);
+			fprintf(stderr, "build_fat_chain: fseeko error, errno %d.\n", errno);
+			return(NULL);
 		}
 		s = fread(&cluster, info->fatmult, 1, f);
 		if (s != 1) {
+			fprintf(stderr, "build_fat_chain: fread error, errno %d.\n", errno);
 			fprintf(stderr, "build_fat_chain: s = %zu\n", s);
 			fprintf(stderr, "build_fat_chain: (start = %u)\n", start);
 			fprintf(stderr, "build_fat_chain: (size = %u)\n", size);
@@ -259,6 +265,10 @@ struct fat_s *build_fat_chain(FILE *f, struct info_s *info, uint32_t start,
 			break;
 
 		this = calloc(1, sizeof(struct fat_s));
+	        if (this == NULL) {
+			fprintf(stderr, "build_fat_chain: Out of memory, allocating list entry.\n");
+			exit(ENOMEM);
+		}
 		this->nextval = (cluster - 1) * info->bootinfo.spc +
 		    info->rootstart; /* convert to sector */
 		list->next = this;
@@ -268,7 +278,7 @@ struct fat_s *build_fat_chain(FILE *f, struct info_s *info, uint32_t start,
 	   so fat chain is the authority on length */
 	if (nc > 0 && ! (dentry_attr & 16)) {
 		fprintf(stderr, "build_fat_chain: %u clusters left in regular file\n", nc);
-		exit(1);
+		*nc_remaining = nc;
 	}
 	list->next = NULL;
 	return(head);
@@ -455,6 +465,7 @@ struct direntry_s get_entry(struct info_s *info, uint32_t clust, char *filename)
 	struct fat_s *fatptr;
 	int entry;
 	char fname[43];
+	uint32_t nc_remaining;
 
 	f = fopen(info->imagename, "rb");
 	if (f == NULL) {
@@ -463,7 +474,7 @@ struct direntry_s get_entry(struct info_s *info, uint32_t clust, char *filename)
 		de.fnl = 0;
 		return(de);
 	}
-	for (fatptr = build_fat_chain(f, info, clust, 512 * info->bootinfo.spc, 0);
+	for (fatptr = build_fat_chain(f, info, clust, 512 * info->bootinfo.spc, 0, &nc_remaining);
 	    fatptr != NULL; fatptr = fatptr->next) {
 		rc = fseek(f, (uint64_t)(info->imageoffset + 512 * fatptr->nextval), SEEK_SET);
 		if (rc < 0) {
@@ -545,6 +556,7 @@ int ls(struct info_s *info, struct dot_table_s **dot_table) {
 	int freq[256];
 	uint32_t clust;
 	int is_dent;
+	uint32_t nc_remaining;
 
 	for (i = 0; i < 256; i++)
 		freq[i] = 0;
@@ -556,7 +568,7 @@ int ls(struct info_s *info, struct dot_table_s **dot_table) {
 		return(errno);
 	}
 	clust = (info->pwd - info->rootstart) / info->bootinfo.spc + 1;
-	for (fatptr = build_fat_chain(f, info, clust, 512 * info->bootinfo.spc, 0);
+	for (fatptr = build_fat_chain(f, info, clust, 512 * info->bootinfo.spc, 0, &nc_remaining);
 	    fatptr != NULL; fatptr = fatptr->next) {
 		rc = fseek(f, (uint64_t)(info->imageoffset + 512 * fatptr->nextval), SEEK_SET);
 		if (rc < 0) {
@@ -694,6 +706,7 @@ int cat(char *argv, struct info_s *info, struct dot_table_s *dot_table) {
 	char *buf;
 	struct direntry_s de;
 	uint32_t rest;
+	uint32_t nc_remaining;
 
 	de = resolve_path(info, dot_table, argv);
 	if (de.fnl == 0) {
@@ -709,7 +722,7 @@ int cat(char *argv, struct info_s *info, struct dot_table_s *dot_table) {
 		return(errno);
 	}
 	buf = calloc(512 * info->bootinfo.spc, sizeof(char));
-	for (fatptr = build_fat_chain(f, info, de.fstart, de.fsize, de.attr);
+	for (fatptr = build_fat_chain(f, info, de.fstart, de.fsize, de.attr, &nc_remaining);
 	    fatptr != NULL; fatptr = fatptr->next) {
 		rc = fseek(f, (uint64_t)(info->imageoffset + 512 * fatptr->nextval), SEEK_SET);
 		if (rc < 0) {
@@ -773,6 +786,7 @@ int sha1(struct direntry_s de, struct info_s *info, struct dot_table_s *dot_tabl
 	uint32_t rest;
 	unsigned char hash[SHA_DIGEST_LENGTH];
 	SHA_CTX ctx;
+	uint32_t nc_remaining;
 
 	if (*result != NULL) {
 		fprintf(stderr, "sha1: Called with '*result' allocated, but sha1() is supposed to allocate.\n");
@@ -798,7 +812,8 @@ int sha1(struct direntry_s de, struct info_s *info, struct dot_table_s *dot_tabl
 		return(errno);
 	}
 	buf = calloc(512 * info->bootinfo.spc, sizeof(char));
-	for (fatptr = build_fat_chain(f, info, de.fstart, de.fsize, de.attr);
+
+	for (fatptr = build_fat_chain(f, info, de.fstart, de.fsize, de.attr, &nc_remaining);
 	    fatptr != NULL; fatptr = fatptr->next) {
 		rc = fseek(f, (uint64_t)(info->imageoffset + 512 * fatptr->nextval), SEEK_SET);
 		if (rc < 0) {
@@ -1030,6 +1045,7 @@ int dfxmlify(FILE *f, char *argv, struct info_s *info, struct dot_table_s **dot_
 	char *the_sha1 = NULL;
 	char name_type[2];
 	*(name_type+1) = 0; /* Null-terminate string */
+	uint32_t nc_remaining;
 
 	uint32_t prevpwd = info->pwd; /*AJN: Note that cd() only mutates info->pwd*/
 	rc = cd(argv, info, *dot_table);
@@ -1041,7 +1057,7 @@ int dfxmlify(FILE *f, char *argv, struct info_s *info, struct dot_table_s **dot_
 	clust = (info->pwd - info->rootstart) / info->bootinfo.spc + 1;
 	printf("    <!-- Starting clust: %d -->\n", clust);
 
-	fatptr = build_fat_chain(f, info, clust, 512 * info->bootinfo.spc, 0);
+	fatptr = build_fat_chain(f, info, clust, 512 * info->bootinfo.spc, 0, &nc_remaining);
 
 	/* Special case: Create a fileobject for the root directory, which has no other references */
 	if (!strncmp(argv, "/", 42)) {
@@ -1160,6 +1176,8 @@ int dfxmlify(FILE *f, char *argv, struct info_s *info, struct dot_table_s **dot_
 			if (is_dir) *name_type = 'd';
 			if (de.attr & 1) *name_type = 'r'; /* TODO This is not the right check for a regular file */
 
+			struct fat_s *brfatptr = build_fat_chain(f, info, de.fstart, de.fsize, de.attr, &nc_remaining);
+
 			/*Define full path*/
 			bzero(full_path, 4096 * sizeof(char));
 			concat_retval = snprintf(full_path, 4096, "%s%s%s", argv, strcmp(argv,"/") ? "/" : "", fname);
@@ -1169,6 +1187,10 @@ int dfxmlify(FILE *f, char *argv, struct info_s *info, struct dot_table_s **dot_
 			} else {
 				/*TODO guarantee that len(full_path) >= 1*/
 				printf("      <filename>%s</filename>\n",full_path+1); /*AJN DFXML has a history of not starting paths with '/' */
+				if (nc_remaining > 0) {
+					/* Record errors in reading the FAT chain. */
+					printf("      <error>The FAT chain was truncated with %u clusters remaining.</error>\n", nc_remaining);
+				}
 				if (*name_type) printf("      <name_type>%s</name_type>\n", name_type);
 				printf("      <filesize>%d</filesize>\n", de.fsize);
 				printf("      <alloc>%d</alloc>\n", is_alloc);
@@ -1184,7 +1206,6 @@ int dfxmlify(FILE *f, char *argv, struct info_s *info, struct dot_table_s **dot_
 				printf("      <xtaf:flags>%u</xtaf:flags>\n", de.attr);
 
 				/* Build byte runs if possible */
-				struct fat_s *brfatptr = build_fat_chain(f, info, de.fstart, de.fsize, de.attr);
 				if (fatptr != NULL) {
 					printf("      <byte_runs>\n");
 					/* fsize_accounted: number of bytes accounted for following fat chain.  If this ends up unequal to de.fsize, there is a data anomaly. */
