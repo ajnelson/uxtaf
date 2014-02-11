@@ -37,6 +37,8 @@ See uxtaf.txt for usage information.
 #include <strings.h>
 #include <ctype.h>
 
+#include <inttypes.h>
+
 #ifdef HAVE_SYS_UTSNAME_H
 #include <sys/utsname.h>
 #endif
@@ -656,24 +658,24 @@ void show_info(struct info_s *info) {
 	printf("spc          = %u\n", info->bootinfo.spc);
 	printf("nfat         = %u\n", info->bootinfo.nfat);
 	printf("zero         = %u\n", info->bootinfo.zero);
-	printf("pwd          = %u sectors  @ 0x%llx bytes\n", info->pwd,
+	printf("pwd          = %u sectors  @ 0x%" PRIx64 " bytes\n", info->pwd,
 	    (uint64_t)info->pwd * 512);
 	printf("fatmask      = 0x%08x\n", info->fatmask);
 	printf("%u bits\n", info->fatmult * 8);
-	printf("fatstart     = %u sectors  @ 0x%llx bytes\n", info->fatstart,
+	printf("fatstart     = %u sectors  @ 0x%" PRIx64 " bytes\n", info->fatstart,
 	    (uint64_t)info->fatstart * 512);
 	printf("fatsize      = %u bytes\n", info->fatsize);
-	printf("rootstart    = %u sectors  @ 0x%llx bytes\n", info->rootstart,
+	printf("rootstart    = %u sectors  @ 0x%" PRIx64 " bytes\n", info->rootstart,
 	    (uint64_t)(info->rootstart * 512));
-	printf("firstcluster = %u sectors  @ 0x%llx bytes\n",
+	printf("firstcluster = %u sectors  @ 0x%" PRIx64 " bytes\n",
 	    info->firstcluster, (uint64_t)(info->firstcluster * 512));
-	printf("maxcluster   = %u clusters @ 0x%llx bytes\n", info->maxcluster,
+	printf("maxcluster   = %u clusters @ 0x%" PRIx64 " bytes\n", info->maxcluster,
 	    (uint64_t)(info->maxcluster * 512 * info->bootinfo.spc));
 	printf("numclusters  = %u\n", info->numclusters);
-	printf("mediasize    = %llu bytes\n", info->mediasize);
-	printf("partitionsize= %llu bytes\n", info->partitionsize);
+	printf("mediasize    = %" PRIu64 " bytes\n", info->mediasize);
+	printf("partitionsize= %" PRIu64 " bytes\n", info->partitionsize);
 	printf("fatsecs      = %u sectors\n", info->fatsecs);
-	printf("image offset = %llu\n", info->imageoffset);
+	printf("image offset = %" PRIu64 "\n", info->imageoffset);
 	printf("image name   = %s\n", info->imagename);
 }
 
@@ -693,7 +695,7 @@ int cd(char *argv, struct info_s *info, struct dot_table_s *dot_table) {
 		info->pwd = (de.fstart - 1) * info->bootinfo.spc +
 		    info->rootstart;
 
-	fprintf(stderr, "cd: Debug: new pwd = %u sectors @ 0x%llx bytes into partition at %llu bytes of media\n", info->pwd,
+	fprintf(stderr, "cd: Debug: new pwd = %" PRIu32 " sectors @ 0x%" PRIu64 " bytes into partition at %" PRIu64 " bytes of media\n", info->pwd,
 	    (uint64_t)(info->pwd * 512), info->imageoffset);
 	return retval;
 }
@@ -990,8 +992,8 @@ int dfxml_body(struct info_s *info, struct dot_table_s *dot_table, int argc, cha
 		printf("%s", argv[i]);
 	}
 	printf("</command_line>-->\n");
-	printf("  <volume offset=\"%llu\">\n", info->imageoffset);
-	printf("    <partition_offset>%llu</partition_offset>\n", info->imageoffset);
+	printf("  <volume>\n");
+	printf("    <partition_offset>%" PRIu64 "</partition_offset>\n", info->imageoffset);
 	printf("    <sector_size>512</sector_size>\n");
 	printf("    <block_size>%u</block_size>\n", (info->bootinfo.spc) * 512);
 	if (info->fatmask == FAT32_MASK) {
@@ -1073,7 +1075,7 @@ int dfxmlify(FILE *f, char *argv, struct info_s *info, struct dot_table_s **dot_
 		  rootfatptr = rootfatptr->next) {
 			printf("        <byte_run");
 			printf(" fs_offset='%u'", 512 * rootfatptr->nextval);
-			printf(" img_offset='%llu'", info->imageoffset + 512 * rootfatptr->nextval);
+			printf(" img_offset='%" PRIu64 "'", info->imageoffset + 512 * rootfatptr->nextval);
 			if (rootfatptr == fatptr)
 				printf(" xtaf:fs_sector='%u'", info->pwd);
 			printf(" />\n");
@@ -1095,7 +1097,7 @@ int dfxmlify(FILE *f, char *argv, struct info_s *info, struct dot_table_s **dot_
 			fprintf(stderr, "dfxmlify: fseeko error, errno %d", errno);
 		}
 		dir_off = ftello(f);
-		fprintf(stderr, "dfxmlify: Debug: Changed directory, cursor offset %llu bytes, path %s\n", dir_off, argv);
+		fprintf(stderr, "dfxmlify: Debug: Changed directory, cursor offset %zu bytes, path %s\n", dir_off, argv);
 		if (dir_off == -1); //TODO Handle ftello failing.
 
 		/*printf("entry fnl rhsvda startclust   filesize    "
@@ -1118,7 +1120,7 @@ int dfxmlify(FILE *f, char *argv, struct info_s *info, struct dot_table_s **dot_
 			}
 
 			if (de.fnl == 0 || de.fnl == 0xff) {
-				fprintf(stderr, "dfxmlify: Note: Skipping directory entry (index %d, image offset %llu) due to fnl %u\n", entry, dent_off, de.fnl);
+				fprintf(stderr, "dfxmlify: Note: Skipping directory entry (index %d, image offset %zu) due to fnl %u\n", entry, dent_off, de.fnl);
 				continue; /* to next slot */
 			}
 
@@ -1189,7 +1191,7 @@ int dfxmlify(FILE *f, char *argv, struct info_s *info, struct dot_table_s **dot_
 				printf("      <filename>%s</filename>\n",full_path+1); /*AJN DFXML has a history of not starting paths with '/' */
 				if (nc_remaining > 0) {
 					/* Record errors in reading the FAT chain. */
-					printf("      <error>The FAT chain was truncated with %u clusters remaining.</error>\n", nc_remaining);
+					printf("      <error>The FAT chain was truncated with %" PRIu32 " clusters remaining.</error>\n", nc_remaining);
 				}
 				if (*name_type) printf("      <name_type>%s</name_type>\n", name_type);
 				printf("      <filesize>%d</filesize>\n", de.fsize);
@@ -1219,7 +1221,7 @@ int dfxmlify(FILE *f, char *argv, struct info_s *info, struct dot_table_s **dot_
 						//printf(" xtaf:next_cluster='%d'", brfatptr->nextval);
 						printf(" file_offset='%u'", fsize_accounted);
 						printf(" fs_offset='%u'", 512 * brfatptr->nextval);
-						printf(" img_offset='%llu'", info->imageoffset + 512 * brfatptr->nextval);
+						printf(" img_offset='%" PRIu64 "'", info->imageoffset + 512 * brfatptr->nextval);
 						if (fsize_accounted + full_csize > de.fsize) {
 							this_csize = de.fsize - fsize_accounted;
 						}
