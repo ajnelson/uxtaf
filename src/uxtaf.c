@@ -1175,8 +1175,11 @@ int dfxmlify(FILE *f, char *argv, struct info_s *info, struct dot_table_s **dot_
 
 			is_dir = de.attr & 16;
 			*name_type = 0;
-			if (is_dir) *name_type = 'd';
-			if (de.attr & 1) *name_type = 'r'; /* TODO This is not the right check for a regular file */
+			if (is_dir) {
+				*name_type = 'd';
+			} else {
+				*name_type = 'r';
+			}
 
 			struct fat_s *brfatptr = build_fat_chain(f, info, de.fstart, de.fsize, de.attr, &nc_remaining);
 
