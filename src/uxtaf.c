@@ -468,6 +468,7 @@ struct direntry_s get_entry(struct info_s *info, uint32_t clust, char *filename)
 	int entry;
 	char fname[43];
 	uint32_t nc_remaining;
+	int i;
 
 	f = fopen(info->imagename, "rb");
 	if (f == NULL) {
@@ -491,7 +492,15 @@ struct direntry_s get_entry(struct info_s *info, uint32_t clust, char *filename)
 			}
 			if (de.fnl != 0 && de.fnl != 0xff && de.fnl != 0xe5) {
 				bzero(fname, 43 * sizeof(char));
-				strncpy(fname, de.name, de.fnl);
+				/* Do not rely on .fnl for the name length - it only records up to the dot of the last extension. */
+                                for (i = 0; i < 42; i++) {
+                                        fname[i] = de.name[i];
+                                        if (de.name[i] == 0x00 ||
+                                            (de.name[i] & 0xff) == 0xff) {
+                                                fname[i] = 0;
+                                                break;
+                                        }
+                                }
 				if (!strcmp(fname, filename)) {
 					fclose(f);
 					de.fstart = bswap32(de.fstart);
@@ -593,17 +602,15 @@ int ls(struct info_s *info, struct dot_table_s **dot_table) {
 			de.fstart = bswap32(de.fstart);
 			de.fsize = bswap32(de.fsize);
 			bzero(fname, 43 * sizeof(char));
-			if (de.fnl == 0xe5 || de.fnl > 42)
-				for (i = 0; i < 42; i++) {
-					fname[i] = de.name[i];
-					if (de.name[i] == 0x00 ||
-					    (de.name[i] & 0xff) == 0xff) {
-						fname[i] = 0;
-						break;
-					}
+			/* Copy the name by extracting up to null termination. */
+			for (i = 0; i < 42; i++) {
+				fname[i] = de.name[i];
+				if (de.name[i] == 0x00 ||
+				    (de.name[i] & 0xff) == 0xff) {
+					fname[i] = 0;
+					break;
 				}
-			else
-				strncpy(fname, de.name, de.fnl);
+			}
 			/*AJN Check name for unprintable characters. That's a good indication that this isn't supposed to be a directory entry.*/
 			is_dent = 1;
 			for (i = 0; i < 42; i++)
@@ -630,6 +637,7 @@ int ls(struct info_s *info, struct dot_table_s **dot_table) {
 			    du.month, du.day, du.hour, du.minute, du.second,
 			    fname);
 
+			/* AJN TODO Possible bug? fnl should also be <= 42. */
 			if (de.fnl != 0xe5 && de.attr & 16)
 				add_dot_entry(info, dot_table, de.fstart, clust, 1);
 
@@ -1282,6 +1290,7 @@ int dfxmlify(FILE *f, char *argv, struct info_s *info, struct dot_table_s **dot_
 				fflush(stdout);
 
 				/* Recurse into an allocated directory */
+				/* AJN TODO Possible bug? fnl should also be <= 42. */
 				if (de.fnl != 0xe5 && (de.attr & 16)) {
 					add_dot_entry(info, dot_table, de.fstart, clust, 1);
 					/*Recurse*/
