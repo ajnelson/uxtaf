@@ -1146,7 +1146,10 @@ int dfxmlify(FILE *f, char *argv, struct info_s *info, struct dot_table_s **dot_
 
 			bzero(fname, 43 * sizeof(char));
 			/* Extract name */
-			if (de.fnl == 0xe5 || de.fnl > 42)
+			/* The test was formerly this: (de.fnl == 0xe5 || de.fnl > 42)
+			   However, it turns out to be better to always carve the name.  See the else branch.
+			*/
+			if (1) 
 				for (i = 0; i < 42; i++) {
 					fname[i] = de.name[i];
 					if (de.name[i] == 0x00 ||
@@ -1155,8 +1158,11 @@ int dfxmlify(FILE *f, char *argv, struct info_s *info, struct dot_table_s **dot_
 						break;
 					}
 				}
-			else
+			else {
+				/* AJN Don't do this! The _recorded_ name length does not include the last period and extension.
 				strncpy(fname, de.name, (de.fnl < 42 ? de.fnl : 42));
+				*/
+			}
 			/*AJN Check name for unprintable characters. That's a good indication that this isn't supposed to be a directory entry.*/
 			is_dent = 1;
 			for (i = 0; i < 42; i++)
