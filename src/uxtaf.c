@@ -1073,6 +1073,7 @@ int dfxmlify(FILE *f, char *argv, struct info_s *info, struct dot_table_s **dot_
 	if (!strncmp(argv, "/", 42)) {
 		printf("    <fileobject>\n");
 		printf("      <filename></filename><!--Root directory-->\n");
+		printf("      <name_type>d</name_type>\n");
 		printf("      <alloc>1</alloc>\n");
 		printf("      <inode>%d</inode>\n", XTAFFS_ROOTINO);
 		printf("      <byte_runs>\n");
