@@ -1076,7 +1076,7 @@ int dfxmlify(FILE *f, char *argv, struct info_s *info, struct dot_table_s **dot_
 		printf("      <name_type>d</name_type>\n");
 		printf("      <alloc>1</alloc>\n");
 		printf("      <inode>%d</inode>\n", XTAFFS_ROOTINO);
-		printf("      <byte_runs>\n");
+		printf("      <byte_runs facet=\"data\">\n");
 		this_cluster = clust;
 		for (
 		  rootfatptr = fatptr;
@@ -1097,10 +1097,11 @@ int dfxmlify(FILE *f, char *argv, struct info_s *info, struct dot_table_s **dot_
 	/*BEGIN COPY*/
 
 	/* Loop over clusters of the directory */
+        int cluster_of_dir = 0;
 	for (
 	  ;
 	  fatptr != NULL;
-	  fatptr = fatptr->next) {
+	  fatptr = fatptr->next, cluster_of_dir++) {
 		rc = fseek(f, (uint64_t)(info->imageoffset + 512 * fatptr->nextval), SEEK_SET);
 		if (rc < 0) {
 			fprintf(stderr, "dfxmlify: fseeko error, errno %d", errno);
@@ -1129,7 +1130,7 @@ int dfxmlify(FILE *f, char *argv, struct info_s *info, struct dot_table_s **dot_
 			}
 
 			if (de.fnl == 0 || de.fnl == 0xff) {
-				fprintf(stderr, "dfxmlify: Note: Skipping directory entry (index %d, image offset %zu) due to fnl %u\n", entry, dent_off, de.fnl);
+				fprintf(stderr, "dfxmlify: Note: Skipping directory entry (index %d, image offset %lld) due to fnl %u\n", entry, dent_off, de.fnl);
 				continue; /* to next slot */
 			}
 
@@ -1225,9 +1226,13 @@ int dfxmlify(FILE *f, char *argv, struct info_s *info, struct dot_table_s **dot_
 				printf("      <xtaf:filenamelength>%u</xtaf:filenamelength>\n", de.fnl);
 				printf("      <xtaf:flags>%u</xtaf:flags>\n", de.attr);
 
+				/* Note name of directory entry */
+				printf("      <byte_runs facet=\"name\">\n");
+				printf("        <byte_run file_offset='%lu' fs_offset='%lld' img_offset='%lld' len='64' />\n", cluster_of_dir*info->bootinfo.spc*512 + entry*sizeof(struct direntry_s), dent_off - info->imageoffset, dent_off);
+				printf("      </byte_runs>\n");
 				/* Build byte runs if possible */
 				if (fatptr != NULL) {
-					printf("      <byte_runs>\n");
+					printf("      <byte_runs facet=\"data\">\n");
 					/* fsize_accounted: number of bytes accounted for following fat chain.  If this ends up unequal to de.fsize, there is a data anomaly. */
 					uint32_t fsize_accounted = 0;
 					uint32_t full_csize = 512 * info->bootinfo.spc;
