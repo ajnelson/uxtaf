@@ -1330,13 +1330,7 @@ int main(int argc, char *argv[]) {
 		for (i = 0; i < 255 && i < strlen(argv[2]); i++)
 			info.imagename[i] = argv[2][i];
 		info.imagename[i] = '\0';
-		/* Assign offset of the partition within the image file to info struct */
-		if (argc == 4) {
-			info.imageoffset = atoll(argv[3]);
-		} else {
-			/* Default 0 */
-			info.imageoffset = 0;
-		}
+		info.imageoffset = 0; // AJN TODO Scrap imageoffset
 		ret = attach(&info, &dot_table);
 	} else if (!strcmp(argv[1], "info") && argc == 2)
 		show_info(&info);
