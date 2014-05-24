@@ -156,7 +156,7 @@ struct fat_s { /* 32 bits indeed... */
 };
 
 /* Prototype */
-int dfxmlify(FILE *f, char *argv, struct info_s *info, struct dot_table_s **dot_table);
+int dfxml_walk(FILE *f, char *argv, struct info_s *info, struct dot_table_s **dot_table);
 
 struct datetime_s dosdati(uint16_t date, uint16_t time) {
 	struct datetime_s dt;
@@ -928,10 +928,16 @@ void write_infofile(struct info_s *info, struct dot_table_s **dot_table) {
 	fclose(infofile);
 }
 
-int dfxml_head(int argc, char *argv[]) {
+int dfxml_body(struct info_s *info, struct dot_table_s *dot_table, int argc, char *argv[]) {
+	//Start processing file
 	int retval = 0;
 	int i;
+	FILE *f;
+#ifdef HAVE_SYS_UTSNAME_H
+	struct utsname name;
+#endif
 
+	/* print head of DFXML document */
 	if (argc < 3) {
 		fprintf(stderr, "dfxml_head: Error: Expecting at least two arguments to uxtaf.\n");
 	}
@@ -946,7 +952,7 @@ int dfxml_head(int argc, char *argv[]) {
 	printf("  version='1.1.0'>\n");
 
 	printf("  <metadata>\n");
-	printf("    <dc:type>Disk image</dc:type>\n");
+	printf("    <dc:type>Disk partition image</dc:type>\n");
 	printf("  </metadata>\n");
 	printf("  <creator>\n");
 	printf("    <program>%s</program>\n", PACKAGE);
@@ -956,7 +962,6 @@ int dfxml_head(int argc, char *argv[]) {
 	printf("    </build_environment>\n");
 	printf("    <execution_environment>\n");
 #ifdef HAVE_SYS_UTSNAME_H
-	struct utsname name;
 	if(uname(&name)==0){
 		printf("      <os_sysname>%s</os_sysname>\n",name.sysname);
 		printf("      <os_release>%s</os_release>\n",name.release);
@@ -979,27 +984,8 @@ int dfxml_head(int argc, char *argv[]) {
 	printf("  <source>\n");
 	printf("    <image_filename>%s</image_filename>\n", argv[2]);
 	printf("  </source>\n");
-	return retval;
-}
 
-int dfxml_body(struct info_s *info, struct dot_table_s *dot_table, int argc, char *argv[]) {
-	//Start processing file
-	int retval = 0;
-	int i;
-	FILE *f;
-	f = fopen(info->imagename, "rb");
-	if (f == NULL) {
-		fprintf(stderr, "Error opening %s: %i\n",
-		    info->imagename, errno);
-		return(errno);
-	}
-	printf("  <!--<command_line>");
-	for(i = 0; i < argc; i++){
-		if (i > 0)
-			printf(" ");
-		printf("%s", argv[i]);
-	}
-	printf("</command_line>-->\n");
+	/* print DFXML volume metadata, sourced from info struct */
 	printf("  <volume>\n");
 	printf("    <partition_offset>%" PRIu64 "</partition_offset>\n", info->imageoffset);
 	printf("    <sector_size>512</sector_size>\n");
@@ -1021,20 +1007,28 @@ int dfxml_body(struct info_s *info, struct dot_table_s *dot_table, int argc, cha
     <last_block>235515</last_block>
 
 */
-	retval = dfxmlify(f, "/", info, &dot_table);
-	if (retval != 0) printf("    <!--Error: dfxml conversion of this partition failed.-->");
+	/* walk partition if the file handle opens (the handle is opened here so recursive calls can use it) */
+	f = fopen(info->imagename, "rb");
+	if (f == NULL) {
+		retval = errno;
+		fprintf(stderr, "Error opening \"%s\": %i\n",
+		    info->imagename, retval);
+		printf("    <error>Error opening \"%s\": %i</error>\n",
+		    info->imagename, retval);
+	} else {
+		retval = dfxml_walk(f, "/", info, &dot_table);
+	}
+
+	if (retval != 0) printf("    <!--Error: dfxml conversion of this partition failed.-->\n");
 	printf("  </volume>\n");
         fclose(f);
+
+	printf("</dfxml>\n");
 	return retval;
 }
 
-int dfxml_foot(){
-	printf("</dfxml>\n");
-	return 0;
-}
-
 /* Convert an entire partition to DFXML */
-int dfxmlify(FILE *f, char *argv, struct info_s *info, struct dot_table_s **dot_table) {
+int dfxml_walk(FILE *f, char *argv, struct info_s *info, struct dot_table_s **dot_table) {
 	int rc;
 	int retval = 0;
 	struct direntry_s de;
@@ -1104,10 +1098,10 @@ int dfxmlify(FILE *f, char *argv, struct info_s *info, struct dot_table_s **dot_
 	  fatptr = fatptr->next, cluster_of_dir++) {
 		rc = fseek(f, (uint64_t)(info->imageoffset + 512 * fatptr->nextval), SEEK_SET);
 		if (rc < 0) {
-			fprintf(stderr, "dfxmlify: fseeko error, errno %d", errno);
+			fprintf(stderr, "dfxml_walk: fseeko error, errno %d", errno);
 		}
 		dir_off = ftello(f);
-		fprintf(stderr, "dfxmlify: Debug: Changed directory, cursor offset %zu bytes, path %s\n", dir_off, argv);
+		fprintf(stderr, "dfxml_walk: Debug: Changed directory, cursor offset %zu bytes, path %s\n", dir_off, argv);
 		if (dir_off == -1); //TODO Handle ftello failing.
 
 		/*printf("entry fnl rhsvda startclust   filesize    "
@@ -1119,18 +1113,18 @@ int dfxmlify(FILE *f, char *argv, struct info_s *info, struct dot_table_s **dot_
 		for (entry = 0; entry < dents_per_cluster; entry++) {
 			rc = fseek(f, (uint64_t)(dir_off + entry*sizeof(struct direntry_s)), SEEK_SET); /*Reset file pointer, in case we recursed and didn't reset state*/
 			if (rc) {
-				fprintf(stderr, "dfxmlify: fseek failed resetting at the top of the dirent loop.\n");
+				fprintf(stderr, "dfxml_walk: fseek failed resetting at the top of the dirent loop.\n");
 				return 1;
 			}
 			dent_off = ftello(f);
 			s = fread(&de, sizeof(struct direntry_s), 1, f);
 			if (s != 1) {
-				fprintf(stderr, "dfxmlify: s = %zu\n", s);
+				fprintf(stderr, "dfxml_walk: s = %zu\n", s);
 				return(1);
 			}
 
 			if (de.fnl == 0 || de.fnl == 0xff) {
-				fprintf(stderr, "dfxmlify: Note: Skipping directory entry (index %d, image offset %lld) due to fnl %u\n", entry, dent_off, de.fnl);
+				fprintf(stderr, "dfxml_walk: Note: Skipping directory entry (index %d, image offset %lld) due to fnl %u\n", entry, dent_off, de.fnl);
 				continue; /* to next slot */
 			}
 
@@ -1179,7 +1173,7 @@ int dfxmlify(FILE *f, char *argv, struct info_s *info, struct dot_table_s **dot_
 				if (!isprint(fname[i]) && fname[i] != 0)
 					is_dent = 0;
 			if (is_dent == 0) {
-				fprintf(stderr, "dfxmlify: Note: Skipping directory entry (index %d) due to unprintable character\n", entry);
+				fprintf(stderr, "dfxml_walk: Note: Skipping directory entry (index %d) due to unprintable character\n", entry);
 				continue; /*AJN Of course, the rest of the directory's probably dead at this point. */
 			}
 
@@ -1204,7 +1198,7 @@ int dfxmlify(FILE *f, char *argv, struct info_s *info, struct dot_table_s **dot_
 			concat_retval = snprintf(full_path, 4096, "%s%s%s", argv, strcmp(argv,"/") ? "/" : "", fname);
 			if (concat_retval < 0) {
 				retval = concat_retval;
-				fprintf(stderr, "dfxmlify: snprintf: Some kind of error forming the full path.\n");
+				fprintf(stderr, "dfxml_walk: snprintf: Some kind of error forming the full path.\n");
 			} else {
 				/*TODO guarantee that len(full_path) >= 1*/
 				printf("      <filename>%s</filename>\n",full_path+1); /*AJN DFXML has a history of not starting paths with '/' */
@@ -1300,13 +1294,13 @@ int dfxmlify(FILE *f, char *argv, struct info_s *info, struct dot_table_s **dot_
 				if (de.fnl != 0xe5 && (de.attr & 16)) {
 					add_dot_entry(info, dot_table, de.fstart, clust, 1);
 					/*Recurse*/
-					retval = dfxmlify(f, full_path, info, dot_table);
-					rc = fseek(f, (uint64_t)(info->imageoffset + 512 * fatptr->nextval) + (1+entry)*sizeof(struct direntry_s), SEEK_SET); /*Disk image cursor gets tweaked in every dfxmlify call; reset*/
+					retval = dfxml_walk(f, full_path, info, dot_table);
+					rc = fseek(f, (uint64_t)(info->imageoffset + 512 * fatptr->nextval) + (1+entry)*sizeof(struct direntry_s), SEEK_SET); /*Disk image cursor gets tweaked in every dfxml_walk call; reset*/
 					if (rc < 0) {
-						fprintf(stderr, "dfxmlify: fseek error, errno %d\n", errno);
+						fprintf(stderr, "dfxml_walk: fseek error, errno %d\n", errno);
 					}
 					if (retval) {
-						fprintf(stderr, "dfxmlify: Error in recursive call, retval=%d; terminating.\n", retval);
+						fprintf(stderr, "dfxml_walk: Error in recursive call, retval=%d; terminating.\n", retval);
 						break;
 					}
 				} /* End if (allocated directory) */
@@ -1356,10 +1350,6 @@ int main(int argc, char *argv[]) {
 		cd(argv[2], &info, dot_table);
 	else if (!strcmp(argv[1], "dfxml") && argc == 2)
 		ret = dfxml_body(&info, dot_table, argc, argv);
-	else if (!strcmp(argv[1], "dfxml_head") && argc == 3)
-		ret = dfxml_head(argc, argv);
-	else if (!strcmp(argv[1], "dfxml_foot") && argc == 2)
-		ret = dfxml_foot();
 	else
 		return(usage());
 
